@@ -14,6 +14,10 @@ int main(int argc, char *argv[]) {
     char command[1024];
     fgets(command, sizeof(command), stdin);
 
+    if (strcmp(command, "exit") == 0) {
+      break;
+    }
+
     command[strcspn(command, NEWLINE)] = '\0';
     printf("%s: command not found\n", command);
   }
