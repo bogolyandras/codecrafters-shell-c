@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
     char command[1024];
     fgets(command, sizeof(command), stdin);
 
-    if (strcmp(command, "exit") == 0) {
+    if (strcmp("exit", command) == 0) {
       break;
     }
 
