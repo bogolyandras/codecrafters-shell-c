@@ -5,8 +5,9 @@
 #define NEWLINE "\n"
 
 int main(int argc, char *argv[]) {
+
   // Flush after every printf
-  setbuf(stdout, nullptr);
+  setbuf(stdout, NULL);
 
   while(1) {
     printf("$ ");
@@ -24,6 +25,12 @@ int main(int argc, char *argv[]) {
     }
 
     const size_t newline_index = strcspn(input, NEWLINE);
+    const size_t input_length = strlen(input);
+
+    if (newline_index == input_length) {
+      fprintf(stderr, "failed to find newline");
+      return 1;
+    }
     input[newline_index] = '\0';
 
     if (strcmp(input, "exit") == 0) {
