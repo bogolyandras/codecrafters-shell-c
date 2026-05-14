@@ -6,9 +6,7 @@ file(GLOB_RECURSE SOURCE_FILES src/*.c src/*.h)
 
 set(CMAKE_C_STANDARD 23) # Enable the C23 standard
 
-add_executable(shell ${SOURCE_FILES}
-        src/vector.c
-        src/vector.h)
+add_executable(shell ${SOURCE_FILES})
 
 if (!MSVC)
     target_link_libraries(shell PRIVATE readline)

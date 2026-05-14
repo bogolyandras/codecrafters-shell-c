@@ -2,12 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "vector.h"
+
 #define NEWLINE "\n"
 
 int main(int argc, char *argv[]) {
 
   // Flush after every printf
   setbuf(stdout, NULL);
+
+  Vector tokens;
+  vector_init(&tokens, sizeof(char *));
 
   while(1) {
     printf("$ ");
@@ -32,23 +37,53 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     input[newline_index] = '\0';
+    vector_clear(&tokens);
 
-    if (strcmp(input, "exit") == 0) {
+    char *token = strtok(input, " ");
+    if (token != NULL) {
+      vector_push(&tokens, token);
+    }
+    while (token != NULL) {
+      token = strtok(NULL, " ");
+      if (token != NULL) {
+        vector_push(&tokens, token);
+      }
+    }
+
+    if (tokens.size == 0) {
+      printf("nothing found, continuing" NEWLINE);
+      continue;
+    }
+
+    char *first_parameter = vector_get(&tokens, 0);
+
+    if (strcmp(first_parameter, "exit") == 0) {
       break;
-    } else if (strncmp(input, "echo ", 5) == 0) {
-      printf("%s" NEWLINE, input + 5);
-    } else if (strncmp(input, "type ", 5) == 0) {
-      if (strcmp(input + 5, "echo") == 0) {
-        printf("%s is a shell builtin" NEWLINE, input + 5);
-      } else if (strcmp(input + 5, "exit") == 0) {
-        printf("%s is a shell builtin" NEWLINE, input + 5);
-      } else if (strcmp(input + 5, "type") == 0) {
-        printf("%s is a shell builtin" NEWLINE, input + 5);
+    }
+
+    if (strcmp(first_parameter, "echo") == 0) {
+      for (size_t i = 1; i < tokens.size; i++) {
+        printf("%s ", (char *)vector_get(&tokens, i));
+      }
+      printf(NEWLINE);
+    } else if (strcmp(first_parameter, "type") == 0) {
+      if (tokens.size < 2) {
+        printf("type: missing operand" NEWLINE);
+        continue;
+      }
+
+      char *second_parameter = vector_get(&tokens, 1);
+      if (strcmp(second_parameter, "echo") == 0) {
+        printf("%s is a shell builtin" NEWLINE, second_parameter);
+      } else if (strcmp(second_parameter, "exit") == 0) {
+        printf("%s is a shell builtin" NEWLINE, second_parameter);
+      } else if (strcmp(second_parameter, "type") == 0) {
+        printf("%s is a shell builtin" NEWLINE, second_parameter);
       } else {
-        printf("%s: not found" NEWLINE, input + 5);
+        printf("%s: not found" NEWLINE, second_parameter);
       }
     } else {
-      printf("%s: not found" NEWLINE, input);
+      printf("%s: not found" NEWLINE, first_parameter);
     }
   }
 
