@@ -87,9 +87,10 @@ CI (`.github/workflows/ci.yml`):
   turns every case red.
 - **Windows**: clang with the MSVC runtime (`ilammy/msvc-dev-cmd` provides the Visual Studio
   environment, Ninja builds), a row without sanitizer and one with `-fsanitize=address`
-  (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL`), running the `common` cases. **Not yet run on a
-  real runner**: the job is `continue-on-error` until the plain row is green, and the sanitizer
-  row is a separate row so its setup problems cannot hide the plain result.
+  (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL`), running the `common` cases. Both rows have
+  run green on a real runner and are required, like the Linux jobs. They are separate rows so
+  that a sanitizer runtime problem is told apart from a plain build or test failure. The Windows
+  editor is still only exercised by hand: CI feeds the shell through a pipe.
 
 Not covered: the Windows editor (needs a real console), `-Werror`, static analysis and fuzzing the
 tokenizer (a small libFuzzer target would be a good addition).

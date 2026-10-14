@@ -39,14 +39,11 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure --timeout 120
 
-  # The Windows port was developed with a cross compiler and Wine, and has not run on a real
-  # runner before this job. It is clang targeting the MSVC runtime (the Visual Studio environment
-  # supplies the headers and libraries). The jobs report without failing the workflow: remove
-  # continue-on-error once the "none" row is green.
+  # Clang targeting the MSVC runtime (the Visual Studio environment supplies the headers and
+  # libraries). Both rows are required: a failure fails the workflow.
   windows:
     name: Windows (clang, MSVC runtime, sanitizer ${{ matrix.sanitizer }})
     runs-on: windows-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
