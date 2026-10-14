@@ -3,6 +3,7 @@ file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS src/*.c)
 
 # Usage requirements only: what a platform module needs to implement the interfaces in core/
 add_library(shell_core_api INTERFACE)
+# Alias: a misspelt `shell::` name is a configure error, not a silent `-l` link flag
 add_library(shell::core_api ALIAS shell_core_api)
 target_include_directories(shell_core_api INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

@@ -2,6 +2,7 @@
 
 # The two headers the core receives from the platform (PChar and the path separators), and nothing else
 add_library(shell_platform_config INTERFACE)
+# Alias: a misspelt `shell::` name is a configure error, not a silent `-l` link flag
 add_library(shell::platform_config ALIAS shell_platform_config)
 target_include_directories(shell_platform_config INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # The entry point is wmain, and the text is UTF-16 (see core/pstring.h)
