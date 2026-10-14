@@ -379,7 +379,10 @@ Built with `-municode` and the entry point `wmain` (see `src/win32/app/main_win3
 - **Backslash.** On POSIX a backslash escapes any character. On Windows it is a path separator
   (`cd C:\Users\me`), so an unquoted one only escapes a blank, a quote, `>`, `|`, `&` or `~`
   (`tokenizer_is_escapable`), and inside double quotes only `"`. Both `/` and `\` separate path
-  components when completing.
+  components: the core asks `platform_is_path_separator` wherever it needs to know, in completion
+  (is the first word a path, the directory part), in the candidate list display and in `~` expansion
+  (`~\Documents`). Do not write `'/'` in core code for this. The one fixed `/` is the trailing
+  directory marker that completion puts on a candidate and the editor reads back.
 - **Executables.** There is no execute permission: a regular file is runnable if its extension is
   `.com .exe .bat .cmd` (a fixed list, `PATHEXT` is not read). Names are lower cased and the
   extension may be left out (`find_executable`), so `type notepad` finds `notepad.exe`.

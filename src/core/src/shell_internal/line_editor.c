@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "core/platform.h"
 #include "core/pstring.h"
 #include "core/raii.h"
 #include "core/terminal.h"
@@ -76,7 +77,7 @@ static const PChar *display_name(const PChar *candidate) {
     const size_t length = p_strlen(candidate);
 
     for (size_t i = length > 1 ? length - 1 : 0; i > 0; i--) {
-        if (candidate[i - 1] == '/') {
+        if (platform_is_path_separator(candidate[i - 1])) {
             return candidate + i;
         }
     }

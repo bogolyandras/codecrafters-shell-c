@@ -259,7 +259,8 @@ int tokenize(const PChar *input, CommandVec *commands, TokenizerVariableLookup l
         const PChar *word_start = p;
         word.length = 0;
 
-        if (p[0] == '~' && (p[1] == '\0' || p[1] == '/' || p[1] == '>' || p[1] == '|' || p[1] == '&' || is_blank(p[1])) &&
+        if (p[0] == '~' && (p[1] == '\0' || platform_is_path_separator(p[1]) || p[1] == '>' || p[1] == '|' ||
+                            p[1] == '&' || is_blank(p[1])) &&
             home != NULL) {
             if (word_append(&word, home, home_length) != 0) {
                 return -1;

@@ -172,6 +172,16 @@ static int is_blank(PChar c) {
     return c == ' ' || c == '\t';
 }
 
+/** Returns non-zero if the word has a path separator in it (`/`, and also `\` on Windows) */
+static int contains_path_separator(const PChar *word) {
+    for (const PChar *c = word; *c != '\0'; c++) {
+        if (platform_is_path_separator(*c)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /** Returns a heap copy of line[begin, end) */
 static PChar *copy_range(const PChar *line, size_t begin, size_t end) {
     PChar *copy = malloc((end - begin + 1) * sizeof(PChar));
@@ -288,7 +298,7 @@ int complete_command_line(const PChar *line, size_t word_start, StrVec *matches,
     }
     const int is_first_word = command_begin == word_start;
 
-    if (is_first_word && p_strchr(word, '/') == NULL) {
+    if (is_first_word && !contains_path_separator(word)) {
         return complete_command_name(word, matches, completion);
     }
 
