@@ -54,9 +54,19 @@ jobs:
       - uses: actions/checkout@v7
 
       # Puts the MSVC headers, libraries and linker in the environment, for clang and Ninja
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+      # vcvars64.bat sets INCLUDE, LIB and PATH for the Visual Studio headers, libraries and linker.
+      # It only affects its own process, so what it sets is copied into the environment of the
+      # following steps (GITHUB_ENV). vswhere ships with every Visual Studio, and so with the runner.
+      - name: Visual Studio environment
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $install = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $install) { throw "Visual Studio with the C++ tools was not found" }
+          $vcvars = Join-Path $install "VC\Auxiliary\Build\vcvars64.bat"
+          cmd /c "`"$vcvars`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { "$($Matches[1])=$($Matches[2])" | Add-Content -Path $env:GITHUB_ENV }
+          }
 
       - name: Configure
         shell: bash

@@ -85,8 +85,10 @@ CI (`.github/workflows/ci.yml`):
   after-return and initialisation-order checks and `UBSAN_OPTIONS=halt_on_error=1`, because by
   default UBSan only prints and lets the test pass. Then `ctest`. I checked that a deliberate leak
   turns every case red.
-- **Windows**: clang with the MSVC runtime (`ilammy/msvc-dev-cmd` provides the Visual Studio
-  environment, Ninja builds), a row without sanitizer and one with `-fsanitize=address`
+- **Windows**: clang with the MSVC runtime. No third party action: a PowerShell step finds
+  Visual Studio with `vswhere`, runs `vcvars64.bat` and copies the environment it sets (headers,
+  libraries, `PATH`) into `GITHUB_ENV` for the next steps, and Ninja builds. A row without
+  sanitizer and one with `-fsanitize=address`
   (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL`), running the `common` cases. Both rows have
   run green on a real runner and are required, like the Linux jobs. They are separate rows so
   that a sanitizer runtime problem is told apart from a plain build or test failure. The Windows
