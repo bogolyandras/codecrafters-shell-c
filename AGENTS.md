@@ -124,6 +124,11 @@ its course slug (`oo8` ... `my0`); `run.py --list` prints them. One ctest test p
   instead of renaming `/usr/bin/pwd` with sudo; the terminal is 240 columns wide so long
   temporary paths do not wrap (the line editor has no wrap handling); a stage that would be
   timing dependent in the tester (the reaped job after a FIFO write) waits 50 ms.
+- **Checked against bash**: all 76 stages pass with real bash through the tester's own wrapper
+  (`PS1='$ ' exec /bin/bash --norc -i`; use an absolute path, `PATH` is clean), which is how
+  the harness was validated. `vt.py` therefore also understands the cursor and erase escapes
+  that readline emits (`ESC[K`, `ESC[nC`, ...), which this shell does not use. To run another
+  shell, point `run.py` at a script like that.
 - **Child signals**: Python ignores `SIGPIPE`, and an ignored signal survives `exec`. The
   harness resets the dispositions before starting the shell, or `ls | type exit` would print
   "Broken pipe" from `ls`.

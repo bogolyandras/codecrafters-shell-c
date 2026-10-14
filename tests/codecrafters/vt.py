@@ -15,6 +15,7 @@ class Screen:
         self._row = 0
         self._col = 0
         self._escape = None  # None, "esc" after ESC, "csi" inside a CSI sequence
+        self._parameters = ""
         self._pending_utf8 = b""
         self._lock = threading.Lock()
         self.bells = 0
@@ -31,10 +32,14 @@ class Screen:
     def _put(self, char):
         if self._escape == "esc":
             self._escape = "csi" if char == "[" else None
+            self._parameters = ""
             return
         if self._escape == "csi":
             if "@" <= char <= "~":  # The final byte ends the sequence
                 self._escape = None
+                self._csi(char, self._parameters)
+            else:
+                self._parameters += char
             return
 
         if char == "\x1b":
@@ -60,6 +65,39 @@ class Screen:
                 row.append(" ")
             row[self._col] = char
             self._col += 1
+
+    def _csi(self, final, parameters):
+        """The cursor and erase sequences that readline based shells use to redraw a line."""
+        numbers = [int(part) if part.isdigit() else 0 for part in parameters.lstrip("?").split(";")]
+        count = numbers[0] if numbers and numbers[0] > 0 else 1
+        row = self._cells[self._row]
+        if final == "C":
+            self._col += count
+        elif final == "D":
+            self._col = max(0, self._col - count)
+        elif final == "G":
+            self._col = count - 1
+        elif final == "K":
+            mode = numbers[0] if numbers else 0
+            if mode == 0:
+                del row[self._col:]
+            elif mode == 1:
+                for index in range(min(self._col + 1, len(row))):
+                    row[index] = " "
+            else:
+                del row[:]
+        elif final == "P":
+            del row[self._col:self._col + count]
+        elif final == "@":
+            row[self._col:self._col] = [" "] * count
+        elif final == "A":
+            self._row = max(0, self._row - count)
+        elif final == "B":
+            self._row += count
+            self._ensure_row(self._row)
+        elif final == "J" and (numbers[0] if numbers else 0) == 0:
+            del row[self._col:]
+            del self._cells[self._row + 1:]
 
     def _ensure_row(self, index):
         while len(self._cells) <= index:
