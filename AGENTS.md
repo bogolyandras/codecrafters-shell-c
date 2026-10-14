@@ -18,9 +18,15 @@ platform modules implement that, and exactly one of them is built:
 | `src/win32/` | `shell_win32` (object library, no `wmain`), `shell` | The Win32 implementation, and `wmain` |
 
 Each module has `include/` (public headers) and, for the platform modules, `src/` (sources and
-private headers). The top-level `CMakeLists.txt` adds `src/core` and then `src/win32` or
-`src/posix` with `if (WIN32)`. The object libraries have no `main`, so tests can link
-`shell_core` plus the platform module.
+private headers) and `app/` (the entry point, `main_posix.c` / `main_win32.c`, alone in its
+directory so the library globs never see it). The top-level `CMakeLists.txt` adds `src/core` and
+then `src/win32` or `src/posix` with `if (WIN32)`. The object libraries have no `main`, so tests
+can link `shell_core` plus the platform module.
+
+The targets are used through namespaced aliases, `shell::core_api` and `shell::platform_config`
+(the second one is defined by whichever platform module is built): a misspelt `shell::` name is a
+configure error, where a plain name would silently turn into a linker flag. The project needs
+CMake 3.21 (the first that knows C23) and requires the C23 standard from the compiler.
 
 Includes are namespaced by module: `"core/pstring.h"`, `"core/datastructs/vector.h"`,
 `"core/platform.h"`, `"core/shell_internal/tokenizer.h"`, `"core/shell_builtin/history.h"`.
@@ -40,7 +46,8 @@ header** (`unistd.h`, `fcntl.h`, `windows.h`, `io.h`, `termios.h`, ...). It is e
   some toolchain includes itself (`sys/stat.h`, `fcntl.h`, `io.h`, `direct.h`) cannot be shadowed
   and are left to the scan.
 - `cmake/check_platform_includes.cmake` runs as part of every build (target
-  `check_platform_includes`) and fails if `src/core` includes any of them, `src/posix` a Windows
+  `check_platform_includes`, which `shell_core` depends on, so it runs first even when only one
+  target is built) and fails if `src/core` includes any of them, `src/posix` a Windows
   header or `src/win32` a POSIX-only one. This is what catches a wrong header in the module the
   compiler of the current system does not build.
 
@@ -54,14 +61,14 @@ Sources of each module are globbed (`CONFIGURE_DEPENDS`), so a new `.c` file is 
 next build. The binary is written to `<build dir>/shell`, where the CodeCrafters runner and CI
 expect it.
 
-CI (`t.github`) builds with GCC and Clang using `-Wall -Wextra
+CI (`.github/workflows/ci.yml`) builds with GCC and Clang using `-Wall -Wextra
 -fsanitize=address,undefined`, runs a small piped smoke test, and has a Windows (MinGW-w64, UCRT64)
 job that is allowed to fail until it has been green once.
 
 | File | Role |
 |---|---|
 | `src/core/src/shell.c` | `shell_run`: start-up, the read-eval loop, running a line or a pipeline, clean-up |
-| `src/posix/src/main_posix.c`, `src/win32/src/main_win32.c` | `main` / `wmain`, which only call `shell_run` |
+| `src/posix/app/main_posix.c`, `src/win32/app/main_win32.c` | `main` / `wmain`, which only call `shell_run` |
 | `src/core/src/shell_builtin/builtin_run.c` | The builtin commands themselves (`echo`, `exit`, `type`, `pwd`, `cd`, `history`, `jobs`, `complete`, `declare`), `is_builtin`, `resolve_command` |
 | `src/core/src/shell_internal/shell_error.c` | `shell_print_error` and `shell_report_write_error`, the one place errors are formatted |
 | `core/common.h` | `PATH_BUFFER_SIZE`, and `NEWLINE` and the path separators from `platform_config.h` |
@@ -361,7 +368,7 @@ example a small Python script using `pty.fork()` that sends `"ech\t"`, `"xdg-d\t
 
 ## Windows
 
-Built with `-municode` and the entry point `wmain` (see `src/win32/src/main_win32.c` and
+Built with `-municode` and the entry point `wmain` (see `src/win32/app/main_win32.c` and
 `src/win32/CMakeLists.txt`). The `src/win32/` module is only compiled there.
 
 ### Decisions
@@ -396,7 +403,7 @@ Zig bundles the mingw-w64 headers and Wine runs the result, which is how the por
     python3 -m venv venv && venv/bin/pip install ziglang
     venv/bin/python -m ziglang cc -target x86_64-windows-gnu -municode -DUNICODE -D_UNICODE \
         -Isrc/core/include -Isrc/win32/include -Wall -Wextra -std=gnu11 \
-        $(find src/core/src src/win32/src -name '*.c') -o shell.exe
+        $(find src/core/src src/win32/src src/win32/app -name '*.c') -o shell.exe
     printf 'echo hi > out.txt\ncmd /c type out.txt\nexit\n' | wine shell.exe
 
 Wine can also give the editor a console: run `wine shell.exe` inside a pseudo terminal (the same
