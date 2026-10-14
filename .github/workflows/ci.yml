@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_C_FLAGS="-Wall -Wextra -fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Smoke test
+        run: |
+          out=$(printf '%s\n' 'echo hello > out.txt' 'cat out.txt' "echo 'a  b' \"c  d\"" 'type cd' 'exit' | ./build/shell 2>&1)
+          echo "$out"
+          echo "$out" | grep -q 'hello'
+          echo "$out" | grep -q 'a  b c  d'
+          echo "$out" | grep -q 'cd is a shell builtin'
+
+  # The Windows port was developed with a cross compiler and Wine, never on a real runner, so this
+  # job reports without failing the workflow. Remove continue-on-error after the first green run.
+  windows:
+    name: Windows (MinGW-w64)
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_FLAGS="-Wall -Wextra"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Smoke test
+        run: |
+          out=$(printf '%s\n' 'echo hello > out.txt' "echo 'a  b' \"c  d\"" 'type cd' 'type cmd' 'exit' | ./build/shell.exe 2>&1)
+          echo "$out"
+          grep -q hello out.txt
+          echo "$out" | grep -q 'a  b c  d'
+          echo "$out" | grep -q 'cd is a shell builtin'
+          echo "$out" | grep -qi 'cmd is .*cmd.exe'
