@@ -8,7 +8,7 @@
 /** A command started with `&` */
 typedef struct {
     int number; /** The `[n]` of the job, unique among the jobs in the table */
-    BackgroundProcess process;
+    BackgroundProcess *process; /** Owned */
     PChar *command; /** Owned: the command line as typed, without the final `&` */
     int finished; /** Non-zero once the process was seen to end */
     int status; /** The exit status, valid when `finished` */
@@ -24,15 +24,16 @@ typedef struct {
 /** Returns 0, or -1 with errno set. A table whose init failed is safe to free */
 int jobs_init(JobTable *table);
 
-/** Releases the table. The processes are not waited for or stopped */
+/** Releases the table and its processes. The processes are not waited for or stopped */
 void jobs_free(JobTable *table);
 
 /**
  * Adds a started process. `command` is copied. The job number is one more than the highest
  * number in the table (1 for an empty table) and is stored in `number`.
- * Returns 0, or -1 with errno set (the process is then not in the table).
+ * Returns 0, and the table then owns `process`, or -1 with errno set: the process is not in the
+ * table and still belongs to the caller.
  */
-int jobs_add(JobTable *table, const BackgroundProcess *process, const PChar *command, int *number);
+int jobs_add(JobTable *table, BackgroundProcess *process, const PChar *command, int *number);
 
 /** Looks at every running job without blocking and marks those that ended as finished */
 void jobs_poll(JobTable *table);

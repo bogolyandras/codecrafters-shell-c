@@ -13,26 +13,37 @@
  */
 int do_execution(const PChar* executable_full_path, PChar *const* args);
 
-/** A program started with start_background and not waited for */
-typedef struct {
-    unsigned long id; /** The process id, as shown to the user */
-    void *handle; /** The process handle on Windows, unused on POSIX */
-} BackgroundProcess;
+/**
+ * A program started with start_background and not waited for. What identifies it to the system
+ * (a process id on POSIX, a process handle on Windows) is the platform module's business: the
+ * core only holds a pointer and uses the functions below.
+ */
+typedef struct BackgroundProcess BackgroundProcess;
 
 /**
  * Starts the executable like do_execution does, with the current standard descriptors, but does
  * not wait for it. Its standard input is the null device, so it cannot compete with the shell for
  * the terminal, and on POSIX it is in a process group of its own, so Ctrl-C of a foreground
- * command does not reach it. Returns 0 and fills `process`, or -1 with errno set.
+ * command does not reach it. Returns the process, to be released with background_process_free,
+ * or NULL with errno set.
  */
-int start_background(const PChar *executable_full_path, PChar *const *args, BackgroundProcess *process);
+BackgroundProcess *start_background(const PChar *executable_full_path, PChar *const *args);
+
+/** The process id, as shown to the user */
+unsigned long background_process_id(const BackgroundProcess *process);
 
 /**
  * Checks without blocking whether the process has ended. Returns 1 if it is still running, 0 if
- * it has ended (`status` is set like the result of do_execution and the process is released, so
- * it must not be polled again), or -1 with errno set.
+ * it has ended (`status` is set like the result of do_execution; the system resources of the
+ * process are released and it must not be polled again), or -1 with errno set.
  */
 int poll_background(BackgroundProcess *process, int *status);
+
+/**
+ * Releases the process, including what a poll did not release yet. NULL-safe. A process that is
+ * still running is neither waited for nor stopped.
+ */
+void background_process_free(BackgroundProcess *process);
 
 /** An environment variable set for one child process only */
 typedef struct {

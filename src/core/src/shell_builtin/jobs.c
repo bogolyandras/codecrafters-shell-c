@@ -11,13 +11,15 @@ int jobs_init(JobTable *table) {
 
 void jobs_free(JobTable *table) {
     for (size_t i = 0; i < JobVec_size(&table->jobs); i++) {
-        free(JobVec_get(&table->jobs, i)->command);
+        Job *job = JobVec_get(&table->jobs, i);
+        background_process_free(job->process);
+        free(job->command);
     }
 
     JobVec_free(&table->jobs);
 }
 
-int jobs_add(JobTable *table, const BackgroundProcess *process, const PChar *command, int *number) {
+int jobs_add(JobTable *table, BackgroundProcess *process, const PChar *command, int *number) {
     AUTO_FREE PChar *copy = p_strdup(command);
     if (copy == NULL) {
         return -1;
@@ -31,7 +33,7 @@ int jobs_add(JobTable *table, const BackgroundProcess *process, const PChar *com
         }
     }
 
-    const Job job = {highest + 1, *process, copy, 0, 0};
+    const Job job = {highest + 1, process, copy, 0, 0};
     if (JobVec_push(&table->jobs, job) != 0) {
         return -1;
     }
@@ -49,7 +51,7 @@ void jobs_poll(JobTable *table) {
         }
 
         int status = 0;
-        const int result = poll_background(&job->process, &status);
+        const int result = poll_background(job->process, &status);
         if (result == 0) {
             job->finished = 1;
             job->status = status;
@@ -104,6 +106,7 @@ void jobs_remove_finished(JobTable *table) {
     size_t kept = 0;
     for (size_t i = 0; i < count; i++) {
         if (items[i].finished) {
+            background_process_free(items[i].process);
             free(items[i].command);
         } else {
             items[kept++] = items[i];

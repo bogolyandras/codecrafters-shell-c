@@ -337,21 +337,25 @@ int shell_run(void) {
     }
 
     if (command->background) {
-      BackgroundProcess process = {0};
-      if (start_background(executable_location, argv, &process) != 0) {
+      BackgroundProcess *process = start_background(executable_location, argv);
+      if (process == NULL) {
         shell_print_error(first_parameter, NULL);
         continue;
       }
 
+      // The table owns the process once it is added; the id is read first for that reason
+      const unsigned long process_id = background_process_id(process);
+
       AUTO_FREE PChar *text = background_command_text(input);
       int job_number = 0;
-      if (text == NULL || jobs_add(&jobs, &process, text, &job_number) != 0) {
+      if (text == NULL || jobs_add(&jobs, process, text, &job_number) != 0) {
         // The process runs, but it cannot be listed
+        background_process_free(process);
         shell_print_error(P("shell"), P("failed to record the job"));
         continue;
       }
 
-      p_printf(P("[%d] %lu" NEWLINE), job_number, process.id);
+      p_printf(P("[%d] %lu" NEWLINE), job_number, process_id);
       continue;
     }
 

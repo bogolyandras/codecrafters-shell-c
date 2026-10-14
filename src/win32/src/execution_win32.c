@@ -151,23 +151,51 @@ int do_execution(const PChar* executable_full_path, PChar *const* args) {
     return wait_for(process);
 }
 
-int start_background(const PChar *executable_full_path, PChar *const *args, BackgroundProcess *process) {
+struct BackgroundProcess {
+    HANDLE handle; /** NULL once the process was seen to end and the handle is closed */
+    unsigned long id; /** Kept, because the handle is closed when the process ends */
+};
+
+BackgroundProcess *start_background(const PChar *executable_full_path, PChar *const *args) {
+    BackgroundProcess *process = malloc(sizeof *process);
+    if (process == NULL) {
+        return NULL;
+    }
+
     const int null_input = _wopen(L"NUL", _O_RDONLY);
     if (null_input < 0) {
-        return -1;
+        const int saved_errno = errno;
+        free(process);
+        errno = saved_errno;
+        return NULL;
     }
 
     HANDLE handle = start_process(executable_full_path, args, null_input, 1, 2);
     const int saved_errno = errno;
     close(null_input);
     if (handle == NULL) {
+        free(process);
         errno = saved_errno;
-        return -1;
+        return NULL;
     }
 
-    process->id = (unsigned long)GetProcessId(handle);
     process->handle = handle;
-    return 0;
+    process->id = (unsigned long)GetProcessId(handle);
+    return process;
+}
+
+unsigned long background_process_id(const BackgroundProcess *process) {
+    return process->id;
+}
+
+void background_process_free(BackgroundProcess *process) {
+    if (process == NULL) {
+        return;
+    }
+    if (process->handle != NULL) {
+        CloseHandle(process->handle);
+    }
+    free(process);
 }
 
 int poll_background(BackgroundProcess *process, int *status) {

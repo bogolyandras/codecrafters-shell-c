@@ -57,10 +57,22 @@ int do_execution(const PChar* executable_full_path, PChar *const* args) {
     return wait_for(pid);
 }
 
-int start_background(const PChar *executable_full_path, PChar *const *args, BackgroundProcess *process) {
+struct BackgroundProcess {
+    pid_t pid;
+};
+
+BackgroundProcess *start_background(const PChar *executable_full_path, PChar *const *args) {
+    BackgroundProcess *process = malloc(sizeof *process);
+    if (process == NULL) {
+        return NULL;
+    }
+
     const pid_t pid = fork();
     if (pid < 0) {
-        return -1;
+        const int saved_errno = errno;
+        free(process);
+        errno = saved_errno;
+        return NULL;
     }
 
     if (pid == 0) {
@@ -77,15 +89,22 @@ int start_background(const PChar *executable_full_path, PChar *const *args, Back
         _exit(127);
     }
 
-    process->id = (unsigned long)pid;
-    process->handle = NULL;
-    return 0;
+    process->pid = pid;
+    return process;
+}
+
+unsigned long background_process_id(const BackgroundProcess *process) {
+    return (unsigned long)process->pid;
+}
+
+void background_process_free(BackgroundProcess *process) {
+    free(process); // Nothing to release besides the memory: a pid is not a resource
 }
 
 int poll_background(BackgroundProcess *process, int *status) {
     int wait_status;
     pid_t result;
-    while ((result = waitpid((pid_t)process->id, &wait_status, WNOHANG)) < 0) {
+    while ((result = waitpid(process->pid, &wait_status, WNOHANG)) < 0) {
         if (errno != EINTR) {
             return -1;
         }

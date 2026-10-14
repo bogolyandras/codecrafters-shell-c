@@ -210,7 +210,10 @@ the program's output reaches the terminal as usual, its input is the null device
 - `jobs.[ch]` holds the `JobTable`, oldest first. A new job gets the highest number in the table
   plus one, so numbers restart at 1 once the table is empty (like bash).
 - `start_background` / `poll_background` (`execution_handler.h`) start a program without waiting
-  and check without blocking. On POSIX the child gets its own process group, so Ctrl-C of a
+  and check without blocking. `BackgroundProcess` is an **opaque** type: the core only holds a
+  pointer and uses `background_process_id`, `poll_background` and `background_process_free`; each
+  platform module defines the struct (a `pid_t` on POSIX, a handle and the id on Windows). The
+  `JobTable` owns the processes it holds and frees them when a job is forgotten or at exit. On POSIX the child gets its own process group, so Ctrl-C of a
   foreground command does not reach it.
 - Before every prompt the shell polls the jobs and prints each finished one once
   (`[1]-  Done                    sleep 1`, or `Exit N`, no `&`), then forgets it.
