@@ -35,7 +35,10 @@ a platform module's own `src/` (`fd_raii.h`, `platform_win32.h`, `redirection_wi
 header** (`unistd.h`, `fcntl.h`, `windows.h`, `io.h`, `termios.h`, ...). It is enforced twice:
 
 - `src/core` is compiled with `cmake/forbidden_headers/` first on its include path. It holds a
-  file of each such name containing `#error`, so including one fails the build.
+  file of the main such names (`windows.h`, `unistd.h`, `termios.h`, `pwd.h`, `sys/wait.h`,
+  `poll.h`) containing `#error`, so including one fails the build. Names that a standard header of
+  some toolchain includes itself (`sys/stat.h`, `fcntl.h`, `io.h`, `direct.h`) cannot be shadowed
+  and are left to the scan.
 - `cmake/check_platform_includes.cmake` runs as part of every build (target
   `check_platform_includes`) and fails if `src/core` includes any of them, `src/posix` a Windows
   header or `src/win32` a POSIX-only one. This is what catches a wrong header in the module the

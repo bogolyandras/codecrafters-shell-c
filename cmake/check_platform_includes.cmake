@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.13) # Script mode: this also enables IN_LIST
+
 # Checks which operating system headers each module includes, whatever system this runs on.
 # Run as: cmake -DSOURCE_DIR=<repo>/src -P check_platform_includes.cmake
 #
