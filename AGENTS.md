@@ -76,6 +76,8 @@ expect it.
   must exit with status 0, which is also how a sanitizer report fails a case.
 - `tests/pty_editor.py` (POSIX, needs Python 3): the line editor and TAB completion on a pseudo
   terminal, including the external completers. Pipes never reach the editor.
+- `tests/codecrafters/` (POSIX, needs Python 3 and a C compiler): the **CodeCrafters stages,
+  reconstructed**. See the next section.
 
 CI (`.github/workflows/ci.yml`):
 
@@ -96,6 +98,53 @@ CI (`.github/workflows/ci.yml`):
 
 Not covered: the Windows editor (needs a real console), `-Werror`, static analysis and fuzzing the
 tokenizer (a small libFuzzer target would be a good addition).
+
+### The CodeCrafters stages, reconstructed
+
+`tests/codecrafters/` re-implements the 76 stages of the course (base, navigation, quoting,
+redirection, completion, filename completion, programmable completion, background jobs,
+pipelines, history, history persistence, parameter expansion) from the public tester,
+`codecrafters-io/shell-tester`, which is Go. Each stage is a function in `stages_*.py` named by
+its course slug (`oo8` ... `my0`); `run.py --list` prints them. One ctest test per stage:
+`ctest -R codecrafters.`; or `python3 -I tests/codecrafters/run.py <shell> --stage iz3 --seed 1`.
+
+- **How it works** (mirrors the tester): the shell is started on a pseudo terminal with
+  `PS1="$ "`, `harness.py` types into it and compares the rows of a small terminal model
+  (`vt.py`: `\r`, `\n`, `\b`, bell; blanks right of the cursor are dropped, blanks before it are
+  kept) with what the stage expects. The test cases of the tester are methods of `Stage`:
+  `command_response`, `autocomplete`, `multiple_completions`, `jobs`, `history`, `declare_*` ...
+- **The tester's helper programs** are written again in `tools.py`: `cat`, `ls`, `wc`, `head`,
+  `tail`, `grep` (fixed formats, e.g. `wc` prints `%8d` columns), a completer that checks its
+  argv and `COMP_LINE`/`COMP_POINT` and prints candidates, and a signature printer (C, compiled
+  once) that prints `argv[0]`, which a script cannot see.
+- **Differences from the real tester**, on purpose: values come from a seeded generator (`--seed`
+  repeats a run); every stage gets a fresh temporary directory and a `PATH` that holds only the
+  tools the stages use (the tester runs in a bare container, and on a machine with `exiftool`
+  the prefix `exi` is no longer unique); the `pwd` stage puts a decoy `pwd` first on `PATH`
+  instead of renaming `/usr/bin/pwd` with sudo; the terminal is 240 columns wide so long
+  temporary paths do not wrap (the line editor has no wrap handling); a stage that would be
+  timing dependent in the tester (the reaped job after a FIFO write) waits 50 ms.
+- **Child signals**: Python ignores `SIGPIPE`, and an ignored signal survives `exec`. The
+  harness resets the dispositions before starting the shell, or `ls | type exit` would print
+  "Broken pipe" from `ls`.
+
+#### Why Python, and what a pure C harness would be
+
+The harness is Python because a pseudo terminal, temporary directories, FIFOs, threads and regular
+expressions are a few lines each, the stage scenarios stay close to the Go originals, the repo
+already had `pty_editor.py`, and CI has Python. A **pure C** harness was considered:
+
+| | Python (now) | Pure C |
+|---|---|---|
+| Size | about 2,200 lines for 76 stages and the helpers | several times that: a screen model, row-pointer assertions, regex fallbacks (`regcomp`), pty handling (`forkpty`, `-lutil` on glibc), `/proc` scanning, seeded words, the helper programs |
+| Dependencies | Python 3 and a C compiler (for the signature printer) | a C compiler only; one language and one toolchain for the whole repo |
+| Fits the project | a second language, outside the sanitizer builds | same conventions as the shell, and it could be built with ASan/UBSan like the shell |
+| Risk | little: managed memory, exceptions with a screen dump | memory handling in the test code itself, slower to change while stages are still being fixed |
+| Windows | none (needs a pty) | none either, unless ConPTY is added: that is a separate project |
+| Portability of the helpers | the `cat`/`ls` scripts need a Python interpreter path | they could be one small C multi-call program |
+
+If the dependency matters more than the effort, the order to port is: the screen model and the
+assertions first (they carry the stages), then the stage list, then the helper programs.
 
 | File | Role |
 |---|---|
