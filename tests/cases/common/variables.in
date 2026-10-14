@@ -15,6 +15,7 @@ echo ${greeting}world
 echo ${missing}world
 echo $missing x
 echo "<$greeting>" '$greeting' \$greeting
+echo "esc: \$greeting"
 declare spaced="a  b"
 echo "$spaced"
 declare -p spaced

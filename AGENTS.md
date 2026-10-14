@@ -407,8 +407,11 @@ the MSVC runtime (clang, as in CI) the C runtime picks `wmain` and the flag does
 ### Decisions
 
 - **Backslash.** On POSIX a backslash escapes any character. On Windows it is a path separator
-  (`cd C:\Users\me`), so an unquoted one only escapes a blank, a quote, `>`, `|`, `&` or `~`
-  (`tokenizer_is_escapable`), and inside double quotes only `"`. Both `/` and `\` separate path
+  (`cd C:\Users\me`), so an unquoted one only escapes a blank, a quote, `>`, `|`, `&`, `~` or `$`
+  (`platform_backslash_escapes`), and inside double quotes only `"` and `$`. The `$` is there so
+  that a literal one can be written now that `$name` is expanded (`\$name`, `"\$name"`); a path
+  such as `C:\$Recycle.Bin` has to be put in single quotes. This was found by the first real
+  Windows CI run, whose `variables` case expects `\$greeting` to print `$greeting`. Both `/` and `\` separate path
   components: the core asks `platform_is_path_separator` wherever it needs to know, in completion
   (is the first word a path, the directory part), in the candidate list display and in `~` expansion
   (`~\Documents`). Do not write `'/'` in core code for this. The one fixed `/` is the trailing

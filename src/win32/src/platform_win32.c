@@ -155,10 +155,13 @@ const PChar *platform_default_home_dir(void) {
     return profile != NULL && profile[0] != L'\0' ? profile : NULL;
 }
 
+/* `$` is here so that a literal `$` can be written (`\$name`) now that `$name` is expanded. It
+ * does mean that `C:\$Recycle.Bin` has to be quoted. */
 int platform_backslash_escapes(PChar c) {
-    return c == L' ' || c == L'\t' || c == L'\'' || c == L'"' || c == L'>' || c == L'|' || c == L'&' || c == L'~';
+    return c == L' ' || c == L'\t' || c == L'\'' || c == L'"' || c == L'>' || c == L'|' || c == L'&' ||
+           c == L'~' || c == L'$';
 }
 
 int platform_double_quote_backslash_escapes(PChar c) {
-    return c == L'"';
+    return c == L'"' || c == L'$';
 }

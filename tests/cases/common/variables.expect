@@ -9,6 +9,7 @@ helloworld
 $ world
 $ x
 <hello> $greeting $greeting
+esc: $greeting
 declare -- spaced="a  b"
 declare -- quoted="say \"hi\" \$x"
 bad substitution
