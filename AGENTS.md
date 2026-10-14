@@ -1,37 +1,53 @@
 # AGENTS.md
 
 Notes for anyone (human or agent) working on this shell. It is a CodeCrafters "build your own
-shell" project written in C, built with CMake (one static library per directory under `src/`, with
+shell" project written in C, built with CMake (a portable `core` and one platform module per system, with
 globbed sources, so new files are picked up on the next build). Target toolchains: GCC and Clang (including
 MinGW on Windows). MSVC is not a target. Windows (MinGW-w64 or clang with the MinGW runtime) is
 supported: see the Windows section.
 
 ## Layout
 
-Four libraries, each one depending only on the ones above it, and the program:
+Three modules. The core is portable and declares what it needs from the operating system; the
+platform modules implement that, and exactly one of them is built:
 
-| Directory | Target | Contents |
+| Directory | Targets | Contents |
 |---|---|---|
-| `src/base/` | `shell_base` | `pstring`, `raii`, `str_vec`, `common.h`, `datastructs/` (portable) |
-| `src/platform/` | `shell_platform` | Everything that differs per operating system, behind `include/` |
-| `src/core/` | `shell_core` | The shell logic: `shell_builtin/` (builtins and their state) and `shell_internal/` (parsing, line editor, completion, PATH index) |
-| `src/app/` | `shell` | The read-eval loop (`shell.c`) and the entry point (`main_posix.c` / `main_win32.c`) |
+| `src/core/` | `shell_core` (object library), `shell_core_api` (headers) | Everything portable: strings, containers, tokenizer, builtins, line editor, completion, `shell_run`, and the interfaces to the system (`core/platform.h`, `terminal.h`, `redirection.h`, `execution_handler.h`) |
+| `src/posix/` | `shell_posix` (object library, no `main`), `shell` | The POSIX implementation of those interfaces, and `main` |
+| `src/win32/` | `shell_win32` (object library, no `wmain`), `shell` | The Win32 implementation, and `wmain` |
 
-Includes name the header from the library's directory: `"pstring.h"`, `"datastructs/vector.h"`,
-`"platform.h"`, `"execution_handler.h"`, `"shell_internal/tokenizer.h"`,
-`"shell_builtin/history.h"`. `shell_internal` may include `shell_builtin` headers (history, builtin
-names, completers, variable name rules) but not the other way round, except `jobs.h` which needs
-`execution_handler.h`.
+Each module has `include/` (public headers) and, for the platform modules, `src/` (sources and
+private headers). The top-level `CMakeLists.txt` adds `src/core` and then `src/win32` or
+`src/posix` with `if (WIN32)`. The object libraries have no `main`, so tests can link
+`shell_core` plus the platform module.
 
-**No source file tests for the operating system.** `src/platform/CMakeLists.txt` picks
-`src/platform/posix/` or `src/platform/win32/` with `if (WIN32)`; both directories have the same
-shape and provide the same functions. When something differs between systems, do not add an
-`#ifdef _WIN32`: add a function to `src/platform/include/platform.h` (or one of its siblings) and
-implement it in both directories, or put a constant in the per system `platform_config.h` /
-`pstring_platform.h` (found through the include path, one per system). The one `if (WIN32)` that
-is not in `src/platform` is the entry point and `-municode` in `src/app/CMakeLists.txt`.
+Includes are namespaced by module: `"core/pstring.h"`, `"core/datastructs/vector.h"`,
+`"core/platform.h"`, `"core/shell_internal/tokenizer.h"`, `"core/shell_builtin/history.h"`.
+`shell_internal` may include `shell_builtin` headers (history, builtin names, completers, variable
+name rules) but not the other way round, except `jobs.h` which needs `execution_handler.h`. The only
+unprefixed headers are the ones the platform module supplies to the core, and the private headers of
+a platform module's own `src/` (`fd_raii.h`, `platform_win32.h`, `redirection_win32.h`).
 
-Sources of each library are globbed (`CONFIGURE_DEPENDS`), so a new `.c` file is picked up on the
+### Operating system headers
+
+**No source file tests for the operating system, and the core includes no operating system
+header** (`unistd.h`, `fcntl.h`, `windows.h`, `io.h`, `termios.h`, ...). It is enforced twice:
+
+- `src/core` is compiled with `cmake/forbidden_headers/` first on its include path. It holds a
+  file of each such name containing `#error`, so including one fails the build.
+- `cmake/check_platform_includes.cmake` runs as part of every build (target
+  `check_platform_includes`) and fails if `src/core` includes any of them, `src/posix` a Windows
+  header or `src/win32` a POSIX-only one. This is what catches a wrong header in the module the
+  compiler of the current system does not build.
+
+When the core needs something the system provides, add a function to a `core/*.h` interface and
+implement it in both platform modules, or put a constant in the per system `platform_config.h` /
+`pstring_platform.h` (one pair in `src/posix/include` and `src/win32/include`, found through the
+include path; they may include only standard C headers). Do not add an `#ifdef _WIN32`. The only
+`if (WIN32)` is in the top-level `CMakeLists.txt`.
+
+Sources of each module are globbed (`CONFIGURE_DEPENDS`), so a new `.c` file is picked up on the
 next build. The binary is written to `<build dir>/shell`, where the CodeCrafters runner and CI
 expect it.
 
@@ -41,31 +57,31 @@ job that is allowed to fail until it has been green once.
 
 | File | Role |
 |---|---|
-| `src/app/shell.[ch]` | `shell_run`: start-up, the read-eval loop, running a line or a pipeline, clean-up |
-| `src/app/main_posix.c`, `src/app/main_win32.c` | `main` / `wmain`, which only call `shell_run` |
-| `src/core/shell_builtin/builtin_run.[ch]` | The builtin commands themselves (`echo`, `exit`, `type`, `pwd`, `cd`, `history`, `jobs`, `complete`, `declare`), `is_builtin`, `resolve_command` |
-| `src/core/shell_internal/shell_error.[ch]` | `shell_print_error` and `shell_report_write_error`, the one place errors are formatted |
-| `src/base/common.h` | `PATH_BUFFER_SIZE`, and `NEWLINE` and the path separators from `platform_config.h` |
-| `src/base/str_vec.[ch]` | `StrVec`, a vector of owned strings |
-| `src/core/shell_internal/tokenizer.[ch]` | Quotes, backslashes, `~`, `$name` / `${name}`, `|`, `&`, and `>` `>>` `1>` `2>` `1>>` `2>>` parsing into commands |
-| `src/core/shell_internal/tilde_expansion.[ch]` | `get_home_dir`, for `~` and path completion |
-| `src/core/shell_builtin/history.[ch]` | The entered lines and the history files (see History) |
-| `src/platform/redirection.c`, `include/redirection.h` | Applying and restoring redirections with `dup2` |
-| `src/core/shell_internal/line_editor.[ch]` | Interactive line input and TAB completion (see below) |
-| `src/platform/include/terminal.h`, `posix/terminal_posix.c`, `win32/terminal_win32.c` | Terminal mode, key input and output |
-| `src/platform/include/platform.h`, `posix/platform_posix.c`, `win32/platform_win32.c` | Startup, directory listing, executable rules, output files, path and escape rules |
-| `src/platform/posix/include`, `src/platform/win32/include` | `platform_config.h` (separators, `NEWLINE`) and `pstring_platform.h` (`PChar`, `P()`, `p_*`), one pair per system |
-| `src/platform/{posix,win32}/pstring_*.c` | `p_strerror`, `p_perror`, UTF-8 conversion and (Windows) the stream functions |
-| `src/core/shell_internal/completion.[ch]` | The TAB completion candidates: command names, a registered external completer, or paths |
-| `src/core/shell_builtin/jobs.[ch]` | The table of background jobs (`command &`) and the `jobs` listing |
-| `src/core/shell_builtin/builtins.[ch]` | The list of builtin names, shared by `type` and completion |
-| `src/core/shell_builtin/variables.[ch]` | The table of variables made with `declare`, and the identifier rules (see Variables) |
-| `src/core/shell_builtin/completers.[ch]` | The table of completers registered with `complete -C` (see Programmable completion) |
-| `src/core/shell_internal/path_env_handler.[ch]` | PATH scan, `StrVec` of directories, `PathMap` name to full path |
-| `src/platform/include/execution_handler.h`, `posix/execution_posix.c`, `win32/execution_win32.c` | Run a program and wait: `fork`/`execv` or `CreateProcessW` |
-| `src/base/pstring.[ch]` | The platform string abstraction: `PChar`, `P("...")`, `p_*` functions (see Strings) |
-| `src/base/raii.h` | `CLEANUP`, `AUTO_FREE`, `AUTO_FCLOSE`, `AUTO_CLOSE`, `TAKE`, `TAKE_FD`, `DISOWN` (`AUTO_CLOSE_DIR` is in `platform.h`) |
-| `src/base/datastructs/` | `Vector` and `HashMap` with type safe `VECTOR_DEFINE` / `HASHMAP_DEFINE` |
+| `src/core/src/shell.c` | `shell_run`: start-up, the read-eval loop, running a line or a pipeline, clean-up |
+| `src/posix/src/main_posix.c`, `src/win32/src/main_win32.c` | `main` / `wmain`, which only call `shell_run` |
+| `src/core/src/shell_builtin/builtin_run.c` | The builtin commands themselves (`echo`, `exit`, `type`, `pwd`, `cd`, `history`, `jobs`, `complete`, `declare`), `is_builtin`, `resolve_command` |
+| `src/core/src/shell_internal/shell_error.c` | `shell_print_error` and `shell_report_write_error`, the one place errors are formatted |
+| `core/common.h` | `PATH_BUFFER_SIZE`, and `NEWLINE` and the path separators from `platform_config.h` |
+| `core/str_vec.h`, `src/str_vec.c` | `StrVec`, a vector of owned strings |
+| `core/shell_internal/tokenizer.h` | Quotes, backslashes, `~`, `$name` / `${name}`, `|`, `&`, and `>` `>>` `1>` `2>` `1>>` `2>>` parsing into commands |
+| `core/shell_internal/tilde_expansion.h` | `get_home_dir`, for `~` and path completion |
+| `core/shell_builtin/history.h` | The entered lines and the history files (see History) |
+| `core/redirection.h`, `src/posix/src/redirection_posix.c`, `src/win32/src/redirection_win32.c` | `redirect_stream` / `restore_stream`: point stdout or stderr at a file and put it back. Callers see no descriptor |
+| `core/shell_internal/line_editor.h` | Interactive line input and TAB completion (see below) |
+| `core/terminal.h`, `terminal_posix.c`, `terminal_win32.c` | Terminal mode, key input and output |
+| `core/platform.h`, `platform_posix.c`, `platform_win32.c` | Startup, directory listing, executable rules, default home directory, backslash rules |
+| `src/posix/include`, `src/win32/include` | `platform_config.h` (separators, `NEWLINE`) and `pstring_platform.h` (`PChar`, `P()`, `p_*` aliases), one pair per system |
+| `pstring_posix.c`, `pstring_win32.c` | `p_strerror`, `p_perror`, `p_getcwd`, `p_chdir`, UTF-8 conversion and (Windows) the stream functions |
+| `core/shell_internal/completion.h` | The TAB completion candidates: command names, a registered external completer, or paths |
+| `core/shell_builtin/jobs.h` | The table of background jobs (`command &`) and the `jobs` listing |
+| `core/shell_builtin/builtins.h` | The list of builtin names, shared by `type` and completion |
+| `core/shell_builtin/variables.h` | The table of variables made with `declare`, and the identifier rules (see Variables) |
+| `core/shell_builtin/completers.h` | The table of completers registered with `complete -C` (see Programmable completion) |
+| `core/shell_internal/path_env_handler.h` | PATH scan, `StrVec` of directories, `PathMap` name to full path |
+| `core/execution_handler.h`, `execution_posix.c`, `execution_win32.c` | Run a program and wait: `fork`/`execv` or `CreateProcessW` |
+| `core/pstring.h`, `src/pstring.c` | The platform string abstraction: `PChar`, `P("...")`, `p_*` functions (see Strings) |
+| `core/raii.h` | `CLEANUP`, `AUTO_FREE`, `AUTO_FCLOSE`, `TAKE`, `DISOWN` (`AUTO_CLOSE_DIR` is in `platform.h`; `AUTO_CLOSE` and `TAKE_FD` for descriptors are each platform module's private `fd_raii.h`) |
+| `core/datastructs/` | `Vector` and `HashMap` with type safe `VECTOR_DEFINE` / `HASHMAP_DEFINE` |
 
 ## Finding commands
 
@@ -242,7 +258,7 @@ All shell text is `PChar`, from `pstring.h`: `char` (UTF-8 bytes) on POSIX and `
   `p_fgets` and `p_getchar` are functions that convert with the project's own codec (or write
   wide text straight to a console). Do not use the C runtime's wide stdio or `_O_U8TEXT`: it
   converts one UTF-16 unit at a time and mangles characters outside the BMP.
-- OS calls that take a path or a name go through `p_getenv`, `p_getcwd`, `p_chdir`, `p_open`
+- OS calls that take a path or a name go through `p_getenv`, `p_fopen`, `p_getcwd`, `p_chdir`
   (wide variants on Windows). Directory listing, executables, process creation and the terminal
   are behind `platform.h`, `execution_handler.h` and `terminal.h`; do not call `opendir`,
   `stat`, `fork` and friends from shell logic.
@@ -342,8 +358,8 @@ example a small Python script using `pty.fork()` that sends `"ech\t"`, `"xdg-d\t
 
 ## Windows
 
-Built with `-municode` and the entry point `wmain` (see `src/app/main_win32.c` and
-`src/app/CMakeLists.txt`). The `src/platform/win32/` directory is only compiled there.
+Built with `-municode` and the entry point `wmain` (see `src/win32/src/main_win32.c` and
+`src/win32/CMakeLists.txt`). The `src/win32/` module is only compiled there.
 
 ### Decisions
 
@@ -362,7 +378,11 @@ Built with `-municode` and the entry point `wmain` (see `src/app/main_win32.c` a
   command is interrupted. At the prompt the editor reads it as a key.
 - **Exit status** values above 255 are reported as 255.
 - **Redirected files** are opened in text mode, so the shell's own output gets `\r\n` line
-  endings. Programs that are launched write their own bytes.
+  endings. Programs that are launched write their own bytes. The files are opened with
+  `CreateFileW` and wrapped in a C runtime descriptor (`_open_osfhandle`), which is what the
+  redirection of the shell's own output (`_dup2` onto 1 and 2) still needs. Moving all output to
+  handles (`SetStdHandle`, `WriteFile`) is not done: it needs the builtins to write through a
+  platform writer instead of the C runtime's `stdout`.
 - **Not done:** `PATHEXT`, wildcard expansion, case-insensitive file name completion, and leaving
   the extension out when running a command given as a path (`.\prog`, see Finding commands).
 
@@ -372,9 +392,8 @@ Zig bundles the mingw-w64 headers and Wine runs the result, which is how the por
 
     python3 -m venv venv && venv/bin/pip install ziglang
     venv/bin/python -m ziglang cc -target x86_64-windows-gnu -municode -DUNICODE -D_UNICODE \
-        -Isrc/base -Isrc/platform/include -Isrc/platform/win32/include -Isrc/core \
-        -Wall -Wextra -std=gnu11 src/base/*.c src/base/datastructs/*.c src/platform/*.c \
-        src/platform/win32/*.c src/core/*/*.c src/app/shell.c src/app/main_win32.c -o shell.exe
+        -Isrc/core/include -Isrc/win32/include -Wall -Wextra -std=gnu11 \
+        $(find src/core/src src/win32/src -name '*.c') -o shell.exe
     printf 'echo hi > out.txt\ncmd /c type out.txt\nexit\n' | wine shell.exe
 
 Wine can also give the editor a console: run `wine shell.exe` inside a pseudo terminal (the same

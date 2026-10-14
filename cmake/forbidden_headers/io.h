@@ -1,0 +1,1 @@
+#error "<io.h> is an operating system header: use it only inside src/posix or src/win32, and reach the system through core/platform.h, core/terminal.h, core/redirection.h and core/execution_handler.h"
