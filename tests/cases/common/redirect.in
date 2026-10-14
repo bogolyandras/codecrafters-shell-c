@@ -1,0 +1,7 @@
+echo hello > out.txt
+echo again >> out.txt
+echo replaced 1> one.txt
+echo kept 1>> one.txt
+echo quoted "a > b" > q.txt
+echo first > nothing.txt > target.txt
+exit

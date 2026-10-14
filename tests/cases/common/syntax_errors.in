@@ -1,0 +1,7 @@
+echo "unterminated
+echo hi >
+echo hi | | echo
+| echo hi
+echo a & echo b
+echo still alive
+exit

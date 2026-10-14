@@ -1,0 +1,5 @@
+shell: unterminated quote
+shell: syntax error: expected a file name after
+shell: syntax error: expected a command around
+shell: syntax error: '&' can only end the line
+still alive

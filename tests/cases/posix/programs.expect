@@ -1,0 +1,10 @@
+from a path
+./nothing_here: not found
+/etc: not found
+piped
+file:piped.txt:a b c
+/bin/echo is /bin/echo
+cat is /
+Running                 sleep 1 &
+value
+declare -- name="value"

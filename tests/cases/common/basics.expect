@@ -1,0 +1,7 @@
+hello world
+a  b c  d
+one two its
+cd is a shell builtin
+echo is a shell builtin
+nonexistent_command_xyz: not found
+!shell: unterminated quote

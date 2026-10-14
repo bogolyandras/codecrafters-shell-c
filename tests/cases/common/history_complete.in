@@ -1,0 +1,14 @@
+echo one
+echo two
+history 2
+complete -p git
+complete   -C    /path/to/git/completer   git
+complete -p git
+complete -C /path/to/docker/completer docker
+complete -p
+complete -r git
+complete -p git
+complete -r git
+complete -z
+complete -C
+exit

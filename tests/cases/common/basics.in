@@ -1,0 +1,10 @@
+echo hello world
+echo 'a  b' "c  d"
+echo one\ two 'it''s'
+type cd
+type echo
+type nonexistent_command_xyz
+pwd
+cd /
+cd
+exit

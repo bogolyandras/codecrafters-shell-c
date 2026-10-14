@@ -1,0 +1,6 @@
+file:out.txt:hello
+file:out.txt:again
+file:one.txt:replaced
+file:one.txt:kept
+file:q.txt:a > b
+file:target.txt:first

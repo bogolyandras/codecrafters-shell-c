@@ -1,0 +1,13 @@
+/bin/echo from a path
+./nothing_here
+/etc
+echo piped | cat
+echo a b c | cat > piped.txt
+type /bin/echo
+type cat
+sleep 1 &
+jobs
+declare name=value
+echo $name | cat
+declare -p name | cat
+exit

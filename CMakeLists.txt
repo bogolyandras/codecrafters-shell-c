@@ -36,5 +36,7 @@ endif ()
 # No object file is compiled before the include check has passed, also when only one target is built
 add_dependencies(shell_core check_platform_includes)
 
-# Room for the tests: add_subdirectory(tests) here, linking shell_core and the platform module
-# (shell_posix / shell_win32), which are libraries without main()
+# Behaviour tests (ctest): they run the built `shell`. Tests that link shell_core and the
+# platform module (shell_posix / shell_win32, libraries without main()) can be added there too.
+enable_testing()
+add_subdirectory(tests)

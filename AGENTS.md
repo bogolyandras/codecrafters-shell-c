@@ -2,9 +2,11 @@
 
 Notes for anyone (human or agent) working on this shell. It is a CodeCrafters "build your own
 shell" project written in C, built with CMake (a portable `core` and one platform module per system, with
-globbed sources, so new files are picked up on the next build). Target toolchains: GCC and Clang (including
-MinGW on Windows). MSVC is not a target. Windows (MinGW-w64 or clang with the MinGW runtime) is
-supported: see the Windows section.
+globbed sources, so new files are picked up on the next build). Target toolchains: GCC and Clang
+on Linux, and on Windows either clang with the MSVC runtime (what CI builds) or MinGW-w64. `cl.exe`
+is not a target, because the code uses GNU extensions (`__attribute__((cleanup))`, statement
+expressions, see `raii.h`) that it does not have; clang-cl and clang accept them. See the Windows
+section.
 
 ## Layout
 
@@ -61,9 +63,36 @@ Sources of each module are globbed (`CONFIGURE_DEPENDS`), so a new `.c` file is 
 next build. The binary is written to `<build dir>/shell`, where the CodeCrafters runner and CI
 expect it.
 
-CI (`.github/workflows/ci.yml`) builds with GCC and Clang using `-Wall -Wextra
--fsanitize=address,undefined`, runs a small piped smoke test, and has a Windows (MinGW-w64, UCRT64)
-job that is allowed to fail until it has been green once.
+### Tests and CI
+
+`ctest --test-dir <build dir> --output-on-failure` runs everything in `tests/`:
+
+- `tests/cases/common/*.in` and `.expect`: the shell is fed the `.in` file on standard input and
+  every line of `.expect` must appear in its output (`!text`: must not; `file:NAME:text`: a file
+  the case created contains the text). Builtins and shell syntax only, so they run on every
+  platform. `tests/cases/posix/` adds cases that use programs such as `cat` and `sleep`. The
+  runner is plain CMake (`tests/run_case.cmake`), and each case runs in its own empty directory:
+  **a case must not `cd` before it creates files**, or they land in the home directory. The shell
+  must exit with status 0, which is also how a sanitizer report fails a case.
+- `tests/pty_editor.py` (POSIX, needs Python 3): the line editor and TAB completion on a pseudo
+  terminal, including the external completers. Pipes never reach the editor.
+
+CI (`.github/workflows/ci.yml`):
+
+- **Linux**: GCC and Clang, each as `Debug` and `RelWithDebInfo` (`-O2` exposes undefined
+  behaviour that `-O0` hides), with `-Wall -Wextra -fsanitize=address,undefined
+  -fno-sanitize-recover=undefined -fno-omit-frame-pointer`. `ASAN_OPTIONS` turns on leak, stack-use-
+  after-return and initialisation-order checks and `UBSAN_OPTIONS=halt_on_error=1`, because by
+  default UBSan only prints and lets the test pass. Then `ctest`. I checked that a deliberate leak
+  turns every case red.
+- **Windows**: clang with the MSVC runtime (`ilammy/msvc-dev-cmd` provides the Visual Studio
+  environment, Ninja builds), a row without sanitizer and one with `-fsanitize=address`
+  (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL`), running the `common` cases. **Not yet run on a
+  real runner**: the job is `continue-on-error` until the plain row is green, and the sanitizer
+  row is a separate row so its setup problems cannot hide the plain result.
+
+Not covered: the Windows editor (needs a real console), `-Werror`, static analysis and fuzzing the
+tokenizer (a small libFuzzer target would be a good addition).
 
 | File | Role |
 |---|---|
@@ -363,16 +392,17 @@ mintty in Git Bash) the plain `fgets` fallback runs.
 
 ### Testing it
 
-Piped input only exercises the fallback. To test the editor you need a pseudo terminal, for
-example a small Python script using `pty.fork()` that sends `"ech\t"`, `"xdg-d\t\t"`, `"\x7f"`,
-`"\x03"` and `"\x04"` and checks the echoed output (name the script something other than
-`pty.py`, which shadows the standard module). Build with
-`-fsanitize=address,undefined` and check that no leak report appears on exit.
+Piped input only exercises the fallback. To test the editor you need a pseudo terminal:
+`tests/pty_editor.py` does that with `pty.fork()` (run it as `python3 -I`, and do not name a
+script `pty.py`, which shadows the standard module). Add a case there for new editor behaviour.
+Build with `-fsanitize=address,undefined` and check that no leak report appears on exit.
 
 ## Windows
 
-Built with `-municode` and the entry point `wmain` (see `src/win32/app/main_win32.c` and
-`src/win32/CMakeLists.txt`). The `src/win32/` module is only compiled there.
+The entry point is `wmain` (see `src/win32/app/main_win32.c` and `src/win32/CMakeLists.txt`). With
+MinGW it is built with `-municode`, which `src/win32/CMakeLists.txt` adds only `if (MINGW)`; with
+the MSVC runtime (clang, as in CI) the C runtime picks `wmain` and the flag does not exist. The
+`src/win32/` module is only compiled on Windows.
 
 ### Decisions
 

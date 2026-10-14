@@ -7,68 +7,79 @@ on:
 
 jobs:
   linux:
-    name: Linux (${{ matrix.compiler }})
+    name: Linux (${{ matrix.compiler }}, ${{ matrix.build_type }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
+        # Debug is -O0. RelWithDebInfo is -O2, where undefined behaviour that is harmless
+        # unoptimised starts to matter, so both are run under the sanitizers.
+        build_type: [Debug, RelWithDebInfo]
+    env:
+      # Report a leak, a use of a freed stack frame and a bad initialisation order, with a stack
+      ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_string_checks=1:abort_on_error=0:print_stacktrace=1
+      # Undefined behaviour stops the program (the default is to print and carry on, which
+      # would let the test pass), and the stack says where
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
       - uses: actions/checkout@v7
 
       - name: Configure
         run: >
           cmake -S . -B build
-          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -DCMAKE_C_COMPILER=${{ matrix.compiler }}
-          -DCMAKE_C_FLAGS="-Wall -Wextra -fsanitize=address,undefined"
+          -DCMAKE_C_FLAGS="-Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
 
       - name: Build
         run: cmake --build build
 
-      - name: Smoke test
-        run: |
-          out=$(printf '%s\n' 'echo hello > out.txt' 'cat out.txt' "echo 'a  b' \"c  d\"" 'type cd' 'exit' | ./build/shell 2>&1)
-          echo "$out"
-          echo "$out" | grep -q 'hello'
-          echo "$out" | grep -q 'a  b c  d'
-          echo "$out" | grep -q 'cd is a shell builtin'
+      # Piped cases (tests/cases) and the line editor through a pseudo terminal (tests/pty_editor.py)
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 120
 
-  # The Windows port was developed with a cross compiler and Wine, never on a real runner, so this
-  # job reports without failing the workflow. Remove continue-on-error after the first green run.
+  # The Windows port was developed with a cross compiler and Wine, and has not run on a real
+  # runner before this job. It is clang targeting the MSVC runtime (the Visual Studio environment
+  # supplies the headers and libraries). The jobs report without failing the workflow: remove
+  # continue-on-error once the "none" row is green.
   windows:
-    name: Windows (MinGW-w64)
+    name: Windows (clang, MSVC runtime, sanitizer ${{ matrix.sanitizer }})
     runs-on: windows-latest
     continue-on-error: true
-    defaults:
-      run:
-        shell: msys2 {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        # "address" is separate so that a problem with the sanitizer runtime (an unverified
+        # setup on this platform) cannot hide whether the plain build and tests work
+        sanitizer: [none, address]
     steps:
       - uses: actions/checkout@v7
 
-      - uses: msys2/setup-msys2@v2
+      # Puts the MSVC headers, libraries and linker in the environment, for clang and Ninja
+      - uses: ilammy/msvc-dev-cmd@v1
         with:
-          msystem: UCRT64
-          update: false
-          install: >-
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
+          arch: x64
 
       - name: Configure
-        run: >
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_C_FLAGS="-Wall -Wextra"
+        shell: bash
+        run: |
+          flags="-Wall -Wextra"
+          runtime=""
+          if [ "${{ matrix.sanitizer }}" = "address" ]; then
+            # The AddressSanitizer runtime needs the release C runtime, not the debug one
+            flags="$flags -fsanitize=address -fno-omit-frame-pointer"
+            runtime="-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL"
+          fi
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS="$flags" \
+            $runtime
 
       - name: Build
         run: cmake --build build
 
-      - name: Smoke test
-        run: |
-          out=$(printf '%s\n' 'echo hello > out.txt' "echo 'a  b' \"c  d\"" 'type cd' 'type cmd' 'exit' | ./build/shell.exe 2>&1)
-          echo "$out"
-          grep -q hello out.txt
-          echo "$out" | grep -q 'a  b c  d'
-          echo "$out" | grep -q 'cd is a shell builtin'
-          echo "$out" | grep -qi 'cmd is .*cmd.exe'
+      # The cases in tests/cases/common: builtins and shell syntax, the same on every platform
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 120 -C Debug

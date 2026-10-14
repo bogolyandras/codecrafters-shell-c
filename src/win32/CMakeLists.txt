@@ -16,7 +16,11 @@ target_link_libraries(shell_win32 PUBLIC shell::core_api shell::platform_config)
 
 add_executable(shell app/main_win32.c)
 target_link_libraries(shell PRIVATE shell_core shell_win32)
-target_link_options(shell PRIVATE -municode)
+# MinGW needs -municode to start at wmain. With the MSVC runtime (clang or clang-cl targeting
+# Windows MSVC) the entry point is chosen from wmain by the C runtime, and the flag is unknown.
+if (MINGW)
+    target_link_options(shell PRIVATE -municode)
+endif ()
 
 # Keep the binary at <build dir>/shell(.exe), where CI expects it
 set_target_properties(shell PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

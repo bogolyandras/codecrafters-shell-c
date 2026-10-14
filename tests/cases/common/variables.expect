@@ -1,0 +1,14 @@
+declare: undefined_one: not found
+declare -- variable="value"
+declare: `67=x': not a valid identifier
+declare: `bad-name=1': not a valid identifier
+value value2
+fooend
+fooandbar
+helloworld
+$ world
+$ x
+<hello> $greeting $greeting
+declare -- spaced="a  b"
+declare -- quoted="say \"hi\" \$x"
+bad substitution

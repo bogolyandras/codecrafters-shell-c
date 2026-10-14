@@ -1,0 +1,24 @@
+declare -p undefined_one
+declare variable=value
+declare -p variable
+declare 67=x
+declare bad-name=1
+declare Variable_1=value
+declare Variable_2=value2
+echo $Variable_1 $Variable_2
+declare Var1=foo
+declare Var2=bar
+echo ${Var1}end
+echo ${Var1}and${Var2}
+declare greeting=hello
+echo ${greeting}world
+echo ${missing}world
+echo $missing x
+echo "<$greeting>" '$greeting' \$greeting
+declare spaced="a  b"
+echo "$spaced"
+declare -p spaced
+declare quoted='say "hi" $x'
+declare -p quoted
+echo ${}
+exit

@@ -1,0 +1,7 @@
+    2  echo two
+    3  history 2
+complete: git: no completion specification
+complete -C '/path/to/git/completer' git
+complete -C '/path/to/docker/completer' docker
+complete: -z: invalid option
+complete: -C: option requires an argument
