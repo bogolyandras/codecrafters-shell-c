@@ -2,8 +2,6 @@
 #include "platform_win32.h"
 
 #include <errno.h>
-#include <io.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
@@ -81,13 +79,12 @@ int platform_write(OutStream stream, const PChar *text, size_t length) {
         return 0;
     }
 
-    // The descriptor decides where the text goes, so that redirections made on it apply
-    const intptr_t value = _get_osfhandle(stream == OUT_STDERR ? 2 : 1);
-    if (value == -1 || value == -2) {
+    // The standard handle at this moment, so that redirections (SetStdHandle) apply
+    HANDLE handle = GetStdHandle(stream == OUT_STDERR ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE);
+    if (handle == NULL || handle == INVALID_HANDLE_VALUE) {
         errno = EBADF;
         return -1;
     }
-    HANDLE handle = (HANDLE)value;
 
     DWORD mode;
     if (GetConsoleMode(handle, &mode)) {

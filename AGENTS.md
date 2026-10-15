@@ -35,7 +35,7 @@ Includes are namespaced by module: `"core/pstring.h"`, `"core/datastructs/vector
 `shell_internal` may include `shell_builtin` headers (history, builtin names, completers, variable
 name rules) but not the other way round, except `jobs.h` which needs `execution_handler.h`. The only
 unprefixed headers are the ones the platform module supplies to the core, and the private headers of
-a platform module's own `src/` (`fd_raii.h`, `platform_win32.h`, `redirection_win32.h`).
+a platform module's own `src/` (`fd_raii.h` / `handle_raii.h`, `platform_win32.h`, `redirection_win32.h`).
 
 ### Operating system headers
 
@@ -176,7 +176,7 @@ assertions first (they carry the stages), then the stage list, then the helper p
 | `core/shell_internal/path_env_handler.h` | PATH scan, `StrVec` of directories, `PathMap` name to full path |
 | `core/execution_handler.h`, `execution_posix.c`, `execution_win32.c` | Run a program and wait: `fork`/`execv` or `CreateProcessW` |
 | `core/pstring.h`, `src/pstring.c` | The platform string abstraction: `PChar`, `P("...")`, `p_*` functions (see Strings) |
-| `core/raii.h` | `CLEANUP`, `AUTO_FREE`, `TAKE`, `DISOWN` (`AUTO_CLOSE_DIR` is in `platform.h`; `AUTO_CLOSE` and `TAKE_FD` for descriptors are each platform module's private `fd_raii.h`) |
+| `core/raii.h` | `CLEANUP`, `AUTO_FREE`, `TAKE`, `DISOWN` (`AUTO_CLOSE_DIR` is in `platform.h`; `AUTO_CLOSE` and `TAKE_FD` for descriptors are POSIX's private `fd_raii.h`, `AUTO_CLOSE_HANDLE` and `TAKE_HANDLE` are Windows's `handle_raii.h`) |
 | `core/datastructs/` | `Vector` and `HashMap` with type safe `VECTOR_DEFINE` / `HASHMAP_DEFINE` |
 
 ## Finding commands
@@ -319,8 +319,8 @@ part, and exactly one for a line without `|`. A single command runs as before. S
 - **Builtins are stages too.** They are called through the `BuiltinRunner` callback with
   `in_pipeline` set. On POSIX every stage, builtin or program, runs in its own forked child, so
   the builtin's state changes die with it. On Windows there is no `fork`: the programs are
-  started first, then the builtins run in the shell process with descriptors 0, 1 and 2 pointed
-  at the pipes and restored afterwards.
+  started first, then the builtins run in the shell process with the standard output and error
+  handles pointed at the pipes (`SetStdHandle`) and restored afterwards.
 - **A builtin in a pipeline must not change the shell.** `cd` only validates its argument and
   `exit` does nothing, like in a subshell; `history -r/-w/-a`, `declare name=value` and
   `complete -C/-r` only check their arguments. Write failures are silent there, because the
@@ -483,19 +483,23 @@ the MSVC runtime (clang, as in CI) the C runtime picks `wmain` and the flag does
   extension may be left out (`find_executable`), so `type notepad` finds `notepad.exe`.
   Completion of a command name ignores case.
 - **Processes.** `CreateProcessW`, with the command line quoted by `quote_argument`. The
-  redirected C runtime descriptors 0, 1 and 2 are passed as the standard handles. Batch files run
-  through the command interpreter because no application name is given.
+  standard handles of the shell at that moment (so a redirection applies) are passed, and
+  only those are inherited, through a handle list (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`), so a pipe
+  end the shell holds for another stage cannot leak into a program. Batch files run through the
+  command interpreter because no application name is given.
 - **Ctrl-C.** The shell ignores it while a command runs (`SetConsoleCtrlHandler`), so only the
   command is interrupted. At the prompt the editor reads it as a key.
 - **Exit status** values above 255 are reported as 255.
 - **Line endings.** The shell's own output is `\n` everywhere: `platform_write` writes the bytes
   as they are to a console, a pipe or a file, with no `\r\n` translation (the C runtime's text
-  mode would add it). Programs that are launched write their own bytes. The files are opened
-  with `CreateFileW` and wrapped in a C runtime descriptor (`_open_osfhandle`), and the
-  redirection of the shell's own output is still `_dup2` onto descriptors 1 and 2:
-  `platform_write` writes to the handle behind them. Moving the redirection itself to
-  `SetStdHandle` is not done (the pipe end must be closed after restoring and before waiting,
-  or the reader never sees the end).
+  mode would add it). Programs that are launched write their own bytes.
+- **Handles, not descriptors.** Nothing in the Windows module uses a C runtime descriptor.
+  Files, pipes (`CreatePipe`) and the null device are `HANDLE`s. A redirection is `SetStdHandle`
+  on the standard output or error, and `restore_stream` puts the previous handle back and
+  **then** closes the redirected one (`SavedStream.saved` holds the previous handle). The standard
+  handle owns the redirected handle until then. For a builtin writing into a pipe this closing
+  is what lets the reader see the end of its input, so it has to happen before the programs are
+  waited for: the cleanups of the builtin's loop iteration do it.
 - **Not done:** `PATHEXT`, wildcard expansion, case-insensitive file name completion, and leaving
   the extension out when running a command given as a path (`.\prog`, see Finding commands).
 

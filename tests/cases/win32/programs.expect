@@ -1,0 +1,15 @@
+# A program started with the shell's own standard handles
+from_cmd
+# A program whose output is redirected to a file, replaced and appended to
+file:cmd_out.txt:to_file
+file:cmd_out.txt:appended
+!to_file
+# A builtin writing into a program, and a program writing into a builtin
+builtin_into_program
+builtin_after
+program_to_program
+# Redirections of a stage, and a program reading a pipe into a file
+to_findstr
+file:found.txt:first_line
+# The shell goes on afterwards
+after_programs

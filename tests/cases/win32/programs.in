@@ -1,0 +1,10 @@
+cmd /c echo from_cmd
+cmd /c echo to_file > cmd_out.txt
+cmd /c echo appended >> cmd_out.txt
+echo builtin_into_program | findstr builtin
+cmd /c echo program_into_builtin | echo builtin_after
+cmd /c echo program_to_program | findstr program
+echo to_findstr 2> stage_err.txt | findstr to_
+cmd /c echo first_line | findstr first > found.txt
+echo after_programs
+exit

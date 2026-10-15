@@ -4,6 +4,7 @@
 #
 #   cases/common/*.in|.expect   every platform: builtins and shell syntax only
 #   cases/posix/*.in|.expect    POSIX only: they use programs such as cat and sleep
+#   cases/win32/*.in|.expect    Windows only: they use programs such as cmd and findstr
 #   legacy/pty_editor.py        POSIX only, Python: the line editor and TAB completion through a pseudo terminal
 #   legacy/codecrafters/        POSIX only, Python: the 76 CodeCrafters stages, reconstructed (see AGENTS.md)
 #
@@ -24,6 +25,10 @@ function(add_shell_cases directory prefix)
 endfunction()
 
 add_shell_cases(${CMAKE_CURRENT_SOURCE_DIR}/cases/common common)
+
+if (WIN32)
+    add_shell_cases(${CMAKE_CURRENT_SOURCE_DIR}/cases/win32 win32)
+endif ()
 
 if (NOT WIN32)
     add_shell_cases(${CMAKE_CURRENT_SOURCE_DIR}/cases/posix posix)

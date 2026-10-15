@@ -1,15 +1,13 @@
 #include "core/execution_handler.h"
 
 #include <errno.h>
-#include <fcntl.h>
-#include <io.h>
 #include <stdlib.h>
 #include <windows.h>
 
 #include "core/platform.h"
 #include "platform_win32.h"
 #include "core/raii.h"
-#include "fd_raii.h"
+#include "handle_raii.h"
 #include "redirection_win32.h"
 
 /**
@@ -84,41 +82,103 @@ static PChar *build_command_line(const PChar *executable, PChar *const *args) {
     return line;
 }
 
-/** The OS handle behind a C runtime descriptor, made inheritable, or NULL if there is none */
-static HANDLE inheritable_handle(int fd) {
-    const intptr_t value = _get_osfhandle(fd);
-    if (value == -1 || value == -2) {
-        return NULL;
-    }
+/** The standard handles of this process at this moment: where the shell's own output goes */
+static HANDLE standard_input(void) {
+    return GetStdHandle(STD_INPUT_HANDLE);
+}
 
-    HANDLE handle = (HANDLE)value;
-    SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+static HANDLE standard_output(void) {
+    return GetStdHandle(STD_OUTPUT_HANDLE);
+}
+
+static HANDLE standard_error(void) {
+    return GetStdHandle(STD_ERROR_HANDLE);
+}
+
+/** Opens the null device. Returns INVALID_HANDLE_VALUE with errno set on failure */
+static HANDLE open_null_device(DWORD access) {
+    HANDLE handle = CreateFileW(L"NUL", access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                                FILE_ATTRIBUTE_NORMAL, NULL);
+    if (handle == INVALID_HANDLE_VALUE) {
+        platform_set_errno_from_last_error();
+    }
     return handle;
 }
 
 /**
- * Starts the program with the given C runtime descriptors as its standard input, output and
- * error. Returns the process handle, or NULL with errno set.
+ * Starts the program with the given handles as its standard input, output and error. Only these
+ * handles are inherited (a handle list), so a pipe end the shell holds for another stage never
+ * leaks into this program and keeps a pipe open. Returns the process handle, or NULL with errno set.
  */
-static HANDLE start_process(const PChar *executable, PChar *const *args, int input_fd, int output_fd, int error_fd) {
+static HANDLE start_process(const PChar *executable, PChar *const *args, HANDLE input, HANDLE output, HANDLE error) {
     AUTO_FREE PChar *command_line = build_command_line(executable, args);
     if (command_line == NULL) {
         return NULL;
     }
 
-    STARTUPINFOW startup;
+    const HANDLE standard[3] = {input, output, error};
+    HANDLE inherited[3];
+    DWORD inherited_count = 0;
+    for (int i = 0; i < 3; i++) {
+        if (!handle_is_usable(standard[i])) {
+            continue;
+        }
+
+        // A handle list may name a handle once, and the handle must be inheritable to be in it
+        int listed = 0;
+        for (DWORD j = 0; j < inherited_count; j++) {
+            listed |= inherited[j] == standard[i];
+        }
+        if (!listed) {
+            SetHandleInformation(standard[i], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+            inherited[inherited_count++] = standard[i];
+        }
+    }
+
+    STARTUPINFOEXW startup;
     ZeroMemory(&startup, sizeof startup);
-    startup.cb = sizeof startup;
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdInput = inheritable_handle(input_fd);
-    startup.hStdOutput = inheritable_handle(output_fd);
-    startup.hStdError = inheritable_handle(error_fd);
+    startup.StartupInfo.cb = sizeof startup;
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = handle_is_usable(input) ? input : NULL;
+    startup.StartupInfo.hStdOutput = handle_is_usable(output) ? output : NULL;
+    startup.StartupInfo.hStdError = handle_is_usable(error) ? error : NULL;
+
+    AUTO_FREE char *attribute_storage = NULL;
+    DWORD creation_flags = 0;
+    if (inherited_count > 0) {
+        SIZE_T size = 0;
+        InitializeProcThreadAttributeList(NULL, 1, 0, &size); // fails on purpose, and tells the size
+        attribute_storage = malloc(size);
+        if (attribute_storage == NULL) {
+            return NULL;
+        }
+        LPPROC_THREAD_ATTRIBUTE_LIST list = (LPPROC_THREAD_ATTRIBUTE_LIST)attribute_storage;
+        if (!InitializeProcThreadAttributeList(list, 1, 0, &size)) {
+            platform_set_errno_from_last_error();
+            return NULL;
+        }
+        if (!UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherited,
+                                       inherited_count * sizeof(HANDLE), NULL, NULL)) {
+            platform_set_errno_from_last_error();
+            DeleteProcThreadAttributeList(list);
+            return NULL;
+        }
+        startup.lpAttributeList = list;
+        creation_flags = EXTENDED_STARTUPINFO_PRESENT;
+    }
 
     // The application name is left out so that batch files are run through the command interpreter
     PROCESS_INFORMATION process;
     ZeroMemory(&process, sizeof process);
-    if (!CreateProcessW(NULL, command_line, NULL, NULL, TRUE, 0, NULL, NULL, &startup, &process)) {
+    const BOOL created = CreateProcessW(NULL, command_line, NULL, NULL, inherited_count > 0, creation_flags, NULL,
+                                        NULL, &startup.StartupInfo, &process);
+    if (!created) {
         platform_set_errno_from_last_error();
+    }
+    if (startup.lpAttributeList != NULL) {
+        DeleteProcThreadAttributeList(startup.lpAttributeList);
+    }
+    if (!created) {
         return NULL;
     }
 
@@ -142,8 +202,9 @@ static int wait_for(HANDLE process) {
 }
 
 int do_execution(const PChar* executable_full_path, PChar *const* args) {
-    // Redirections are applied to the C runtime descriptors, so pass those on explicitly
-    HANDLE process = start_process(executable_full_path, args, 0, 1, 2);
+    // A redirection changed the standard handles of this process, so pass those on explicitly
+    HANDLE process = start_process(executable_full_path, args, standard_input(), standard_output(),
+                                   standard_error());
     if (process == NULL) {
         return -1;
     }
@@ -162,18 +223,17 @@ BackgroundProcess *start_background(const PChar *executable_full_path, PChar *co
         return NULL;
     }
 
-    const int null_input = _wopen(L"NUL", _O_RDONLY);
-    if (null_input < 0) {
+    AUTO_CLOSE_HANDLE HANDLE null_input = open_null_device(GENERIC_READ);
+    if (null_input == INVALID_HANDLE_VALUE) {
         const int saved_errno = errno;
         free(process);
         errno = saved_errno;
         return NULL;
     }
 
-    HANDLE handle = start_process(executable_full_path, args, null_input, 1, 2);
-    const int saved_errno = errno;
-    close(null_input);
+    HANDLE handle = start_process(executable_full_path, args, null_input, standard_output(), standard_error());
     if (handle == NULL) {
+        const int saved_errno = errno;
         free(process);
         errno = saved_errno;
         return NULL;
@@ -223,53 +283,36 @@ int run_capture(const PChar *executable_full_path, PChar *const *args, const Env
                 PChar **output) {
     *output = NULL;
 
-    HANDLE read_handle = NULL;
-    HANDLE write_handle = NULL;
-    SECURITY_ATTRIBUTES attributes = {sizeof attributes, NULL, TRUE};
-    if (!CreatePipe(&read_handle, &write_handle, &attributes, 0)) {
+    HANDLE read_end = INVALID_HANDLE_VALUE;
+    HANDLE write_end = INVALID_HANDLE_VALUE;
+    SECURITY_ATTRIBUTES attributes = {sizeof attributes, NULL, FALSE};
+    if (!CreatePipe(&read_end, &write_end, &attributes, 0)) {
         platform_set_errno_from_last_error();
         return -1;
     }
-    SetHandleInformation(read_handle, HANDLE_FLAG_INHERIT, 0);
+    AUTO_CLOSE_HANDLE HANDLE read_handle = read_end;
+    AUTO_CLOSE_HANDLE HANDLE write_handle = write_end;
 
-    // The write end becomes a C runtime descriptor: closing that also closes the handle
-    const int write_fd = _open_osfhandle((intptr_t)write_handle, _O_WRONLY);
-    if (write_fd < 0) {
-        CloseHandle(read_handle);
-        CloseHandle(write_handle);
+    AUTO_CLOSE_HANDLE HANDLE null_input = open_null_device(GENERIC_READ);
+    if (null_input == INVALID_HANDLE_VALUE) {
         return -1;
     }
+    AUTO_CLOSE_HANDLE HANDLE null_error = open_null_device(GENERIC_WRITE);
 
-    const int null_input = _wopen(L"NUL", _O_RDONLY);
-    if (null_input < 0) {
-        const int saved_errno = errno;
-        close(write_fd);
-        CloseHandle(read_handle);
-        errno = saved_errno;
-        return -1;
-    }
-
-    // The child inherits the environment of the shell: the extra variables are set around the start
     for (const EnvVar *variable = environment; variable != NULL && variable->name != NULL; variable++) {
         SetEnvironmentVariableW(variable->name, variable->value);
     }
-    // Messages of the child would land in the middle of the line being edited
-    const int null_error = _wopen(L"NUL", _O_WRONLY);
-    HANDLE process = start_process(executable_full_path, args, null_input, write_fd,
-                                   null_error >= 0 ? null_error : 2);
+    HANDLE process = start_process(executable_full_path, args, null_input, write_handle,
+                                   null_error != INVALID_HANDLE_VALUE ? null_error : standard_error());
     const int start_errno = errno;
     for (const EnvVar *variable = environment; variable != NULL && variable->name != NULL; variable++) {
         SetEnvironmentVariableW(variable->name, NULL);
     }
 
-    close(write_fd);
-    close(null_input);
-    if (null_error >= 0) {
-        close(null_error);
-    }
+    // The shell's copy of the write end must go, or the read below never sees the end of the output
+    CloseHandle(TAKE_HANDLE(write_handle));
 
     if (process == NULL) {
-        CloseHandle(read_handle);
         errno = start_errno;
         return -1;
     }
@@ -286,7 +329,7 @@ int run_capture(const PChar *executable_full_path, PChar *const *args, const Env
             size += count;
         }
     }
-    CloseHandle(read_handle);
+    CloseHandle(TAKE_HANDLE(read_handle));
 
     if (size >= limit) {
         TerminateProcess(process, 1);
@@ -303,23 +346,23 @@ int run_capture(const PChar *executable_full_path, PChar *const *args, const Env
     return *output != NULL ? status : -1;
 }
 
-/** Pipe ends of the link after a stage, as C runtime descriptors. -1 once closed */
+/** Pipe ends of the link after a stage. INVALID_HANDLE_VALUE once closed or given away */
 typedef struct {
-    int read_end;
-    int write_end;
+    HANDLE read_end;
+    HANDLE write_end;
 } Link;
 
-static void close_fd_if_open(int *fd) {
-    if (*fd >= 0) {
-        close(*fd);
-        *fd = -1;
+static void close_handle_if_open(HANDLE *handle) {
+    if (handle_is_usable(*handle)) {
+        CloseHandle(*handle);
     }
+    *handle = INVALID_HANDLE_VALUE;
 }
 
 static void close_links(Link *links, size_t count) {
     for (size_t i = 0; i < count; i++) {
-        close_fd_if_open(&links[i].read_end);
-        close_fd_if_open(&links[i].write_end);
+        close_handle_if_open(&links[i].read_end);
+        close_handle_if_open(&links[i].write_end);
     }
 }
 
@@ -332,21 +375,22 @@ int run_pipeline(const PipelineStage *stages, size_t count, BuiltinRunner run_bu
     }
 
     for (size_t i = 0; i < count; i++) {
-        links[i].read_end = -1;
-        links[i].write_end = -1;
+        links[i].read_end = INVALID_HANDLE_VALUE;
+        links[i].write_end = INVALID_HANDLE_VALUE;
     }
 
     int setup_errno = 0;
 
-    // Not inherited by default: each program is given exactly the ends it needs
+    // Not inheritable: each program is given exactly the ends it needs, through a handle list
     for (size_t i = 0; i + 1 < count; i++) {
-        int ends[2];
-        if (_pipe(ends, 65536, _O_BINARY | _O_NOINHERIT) != 0) {
+        SECURITY_ATTRIBUTES attributes = {sizeof attributes, NULL, FALSE};
+        if (!CreatePipe(&links[i].read_end, &links[i].write_end, &attributes, 65536)) {
+            platform_set_errno_from_last_error();
             setup_errno = errno;
+            links[i].read_end = INVALID_HANDLE_VALUE;
+            links[i].write_end = INVALID_HANDLE_VALUE;
             break;
         }
-        links[i].read_end = ends[0];
-        links[i].write_end = ends[1];
     }
 
     // Programs first, so that they are already reading when a builtin writes
@@ -355,33 +399,33 @@ int run_pipeline(const PipelineStage *stages, size_t count, BuiltinRunner run_bu
             continue;
         }
 
-        AUTO_CLOSE int file_out = -1;
-        AUTO_CLOSE int file_err = -1;
-        int input_fd = i > 0 ? links[i - 1].read_end : 0;
-        int output_fd = i + 1 < count ? links[i].write_end : 1;
-        int error_fd = 2;
+        AUTO_CLOSE_HANDLE HANDLE file_out = INVALID_HANDLE_VALUE;
+        AUTO_CLOSE_HANDLE HANDLE file_err = INVALID_HANDLE_VALUE;
+        HANDLE input = i > 0 ? links[i - 1].read_end : standard_input();
+        HANDLE output = i + 1 < count ? links[i].write_end : standard_output();
+        HANDLE error = standard_error();
 
         const Redirections *redirections = stages[i].redirections;
         if (redirections->stdout_target.path != NULL) {
             file_out = redirect_open(&redirections->stdout_target);
-            if (file_out < 0) {
+            if (file_out == INVALID_HANDLE_VALUE) {
                 p_perror(redirections->stdout_target.path);
                 setup_errno = errno;
                 break;
             }
-            output_fd = file_out;
+            output = file_out;
         }
         if (redirections->stderr_target.path != NULL) {
             file_err = redirect_open(&redirections->stderr_target);
-            if (file_err < 0) {
+            if (file_err == INVALID_HANDLE_VALUE) {
                 p_perror(redirections->stderr_target.path);
                 setup_errno = errno;
                 break;
             }
-            error_fd = file_err;
+            error = file_err;
         }
 
-        processes[i] = start_process(stages[i].path, stages[i].argv, input_fd, output_fd, error_fd);
+        processes[i] = start_process(stages[i].path, stages[i].argv, input, output, error);
         if (processes[i] == NULL) {
             setup_errno = errno;
             break;
@@ -389,17 +433,17 @@ int run_pipeline(const PipelineStage *stages, size_t count, BuiltinRunner run_bu
 
         // The program has its own copies: the shell must not keep the ends, or nobody sees the end
         if (i > 0) {
-            close_fd_if_open(&links[i - 1].read_end);
+            close_handle_if_open(&links[i - 1].read_end);
         }
         if (i + 1 < count) {
-            close_fd_if_open(&links[i].write_end);
+            close_handle_if_open(&links[i].write_end);
         }
     }
 
     // A builtin does not read, so whatever feeds it is cut off now and its writer sees the end
     for (size_t i = 1; i < count; i++) {
         if (stages[i].path == NULL) {
-            close_fd_if_open(&links[i - 1].read_end);
+            close_handle_if_open(&links[i - 1].read_end);
         }
     }
 
@@ -408,16 +452,18 @@ int run_pipeline(const PipelineStage *stages, size_t count, BuiltinRunner run_bu
             continue;
         }
 
-        // The builtin runs in this process with its descriptors pointed at the pipe and the files
+        // The builtin runs in this process with its standard handles pointed at the pipe and the
+        // files. The cleanups put them back, and closing the pipe end is part of that: it has to
+        // happen before the programs are waited for, or their reader never sees the end
         CLEANUP(restore_stream) SavedStream saved_stdout = SAVED_STREAM_INIT(REDIRECT_STDOUT);
         CLEANUP(restore_stream) SavedStream saved_stderr = SAVED_STREAM_INIT(REDIRECT_STDERR);
 
         if (i + 1 < count) {
-            if (redirect_to_fd(links[i].write_end, REDIRECT_STDOUT, &saved_stdout) != 0) {
+            if (redirect_to_handle(links[i].write_end, REDIRECT_STDOUT, &saved_stdout) != 0) {
                 setup_errno = errno;
                 break;
             }
-            close_fd_if_open(&links[i].write_end); // fd 1 holds the only copy now
+            links[i].write_end = INVALID_HANDLE_VALUE; // the standard handle owns the only copy now
         }
 
         const Redirections *redirections = stages[i].redirections;
@@ -462,4 +508,3 @@ int run_pipeline(const PipelineStage *stages, size_t count, BuiltinRunner run_bu
 
     return status;
 }
-

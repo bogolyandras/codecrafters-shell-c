@@ -4,19 +4,22 @@
 /* Windows only, shared by the files in this directory: what execution_win32.c needs in addition
  * to the redirect_stream / restore_stream of core/redirection.h */
 
+#include <windows.h>
+
 #include "core/redirection.h"
 
 /**
- * Opens the target file with CreateFileW and returns it as a C runtime descriptor (text mode, not
- * inherited by launched programs), or -1 with errno set.
+ * Opens the target file with CreateFileW (created if missing, then truncated or appended to).
+ * Returns the handle, not inheritable, or INVALID_HANDLE_VALUE with errno set.
  */
-int redirect_open(const RedirectTarget *target);
+HANDLE redirect_open(const RedirectTarget *target);
 
 /**
- * Points `stream` at the open descriptor `source`, which stays open and owned by the caller, and
- * fills `saved` so the stream can be restored. Returns 0, or -1 with errno set, in which case
- * the stream is left untouched.
+ * Makes `source` the standard handle of `stream` (SetStdHandle) and fills `saved` so that
+ * restore_stream can put the previous one back. On success the standard handle owns `source`:
+ * restore_stream closes it, and the caller must not. Returns 0, or -1 with errno set, in which
+ * case nothing changed and the caller still owns `source`.
  */
-int redirect_to_fd(int source, RedirectStream stream, SavedStream *saved);
+int redirect_to_handle(HANDLE source, RedirectStream stream, SavedStream *saved);
 
 #endif //BOGOLYANDRAS_REDIRECTION_WIN32_H

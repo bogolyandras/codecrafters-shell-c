@@ -1,6 +1,8 @@
 #ifndef BOGOLYANDRAS_REDIRECTION_H
 #define BOGOLYANDRAS_REDIRECTION_H
 
+#include <stdint.h>
+
 #include "core/pstring.h"
 
 /** Where a standard stream is redirected to */
@@ -27,7 +29,7 @@ typedef enum {
  */
 typedef struct {
     RedirectStream stream;
-    int saved; /** Opaque. Negative while the stream is untouched */
+    intptr_t saved; /** Opaque (a descriptor or a handle). -1 while the stream is untouched */
 } SavedStream;
 
 #define SAVED_STREAM_INIT(which) {(which), -1}
