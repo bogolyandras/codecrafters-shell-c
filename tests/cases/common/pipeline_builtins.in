@@ -1,0 +1,23 @@
+echo first | type exit
+echo second | echo third
+echo a | echo b | echo c
+type echo | echo after_type
+history | type echo
+echo hidden | type echo > typed.txt
+echo ignored > stage_out.txt | echo visible
+history abc 2> stage_err.txt | echo fine
+declare piped=1 | echo $piped
+declare -p piped
+cd / | echo still_here
+echo r1 | echo r2
+echo r3 | echo r4
+echo r5 | echo r6
+echo r7 | echo r8
+echo r9 | echo r10
+echo r11 | echo r12
+echo r13 | echo r14
+echo r15 | echo r16
+echo r17 | echo r18
+echo r19 | echo r20
+echo end_marker
+exit

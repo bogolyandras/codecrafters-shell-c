@@ -1,0 +1,21 @@
+# A builtin does not read its input, and the writer upstream still ends
+exit is a shell builtin
+third
+c
+after_type
+echo is a shell builtin
+# Redirections of a stage win over its pipes
+visible
+!ignored
+!hidden
+file:typed.txt:echo is a shell builtin
+file:stage_out.txt:ignored
+file:stage_err.txt:numeric argument required
+!numeric argument required
+fine
+# A builtin in a pipeline does not change the shell
+declare: piped: not found
+still_here
+# Handles and descriptors are not leaked from one line to the next
+r20
+end_marker

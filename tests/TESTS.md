@@ -1,7 +1,7 @@
 # Tests
 
 Run everything with `ctest --test-dir <build dir> --output-on-failure`.
-There are three kinds of tests: 6 case files, 1 pty editor test and 76 CodeCrafters stages.
+There are three kinds of tests: 7 case files, 1 pty editor test and 76 CodeCrafters stages.
 
 ## 1. Case files (`cases/`)
 
@@ -16,6 +16,7 @@ Each case runs in its own empty directory.
 |---|---|
 | `common.basics` | `echo` with plain, single and double quotes and backslash-escaped spaces, `type` of a builtin and of an unknown command, `pwd`, `cd /` and `cd` to home. |
 | `common.history_complete` | `history 2` (last N entries), then the `complete` builtin: register with `-C`, print with `-p`, remove with `-r`, whitespace normalisation, and the error for a bad option or missing argument. |
+| `common.pipeline_builtins` | Builtin-only pipelines: a builtin as writer and as reader (it does not read), three stages, `>` and `2>` on a stage winning over its pipe, `declare` and `cd` not changing the shell, and twenty pipelines in a row to catch leaked handles. |
 | `common.redirect` | `>`, `>>`, `1>`, `1>>`, a quoted `>` that is not a redirect, and several redirects on one command (the last one wins). Checks the file contents. |
 | `common.syntax_errors` | Unterminated quote, `>` without a file, `\| \|`, a leading `\|`, `&` in the middle of a line. Each must print an error and the shell must carry on with the next line. |
 | `common.variables` | `declare` / `declare -p`, invalid names, `$name` and `${name}` expansion, quoting rules (`'...'`, `"..."`, `\$`), unset variables, and `${}` as a bad substitution. |
