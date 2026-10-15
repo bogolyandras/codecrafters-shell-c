@@ -342,9 +342,9 @@ All shell text is `PChar`, from `pstring.h`: `char` (UTF-8 bytes) on POSIX and `
 - Literals: `P("text")`. Narrow literals like `NEWLINE` can be appended inside it:
   `P("cd: too many operands" NEWLINE)`.
 - Format strings: `%` followed by `PS` for a `PChar *` argument, for example
-  `p_fprintf(stderr, P("%" PS ": not found" NEWLINE), name)`. Never use a bare `%s` or `%ls`.
+  `p_eprintf(P("%" PS ": not found" NEWLINE), name)`. Never use a bare `%s` or `%ls`.
 - Functions: `p_strlen`, `p_strcmp`, `p_strncmp`, `p_strchr`, `p_strrchr`, `p_memcpy`,
-  `p_memset`, `p_snprintf`, `p_printf`, `p_fprintf`, `p_fputs`, `p_fgets`, `p_getchar`,
+  `p_memset`, `p_snprintf`, `p_printf`, `p_eprintf`, `p_write`, `p_fgets`, `p_getchar`,
   `p_strdup`, `p_strerror`, `p_perror`.
 - **Sizes and lengths count PChar units, not bytes.** Multiply by `sizeof(PChar)` when
   allocating, and pass `sizeof buffer / sizeof buffer[0]` as a size. Use `PATH_MAX` as is.
@@ -353,10 +353,13 @@ All shell text is `PChar`, from `pstring.h`: `char` (UTF-8 bytes) on POSIX and `
   continuation byte, or a UTF-16 low surrogate), for stepping back over whole characters.
 - `p_from_utf8` / `p_to_utf8` convert at the edges (files, narrow OS APIs); they are plain
   copies on POSIX.
-- Text streams carry UTF-8 on every platform. On Windows `p_printf`, `p_fprintf`, `p_fputs`,
-  `p_fgets` and `p_getchar` are functions that convert with the project's own codec (or write
-  wide text straight to a console). Do not use the C runtime's wide stdio or `_O_U8TEXT`: it
-  converts one UTF-16 unit at a time and mangles characters outside the BMP.
+- Text streams carry UTF-8 on every platform. **Output** is `p_printf` (stdout), `p_eprintf`
+  (stderr) and `p_write` (text without a format): they format in the core and hand the text to
+  `platform_write` (`core/platform.h`), which is `write(1 or 2)` on POSIX and `WriteConsoleW` or
+  `WriteFile` (UTF-8) on Windows. No `FILE *` and no buffering; a failed write is remembered and
+  read with `p_take_write_error`. On Windows `p_fgets` and `p_getchar` convert with the project's
+  own codec. Do not use the C runtime's wide stdio or `_O_U8TEXT`: it converts one UTF-16 unit
+  at a time and mangles characters outside the BMP.
 - OS calls that take a path or a name go through `p_getenv`, `p_getcwd`, `p_chdir`
   (wide variants on Windows). File content (`platform_read_file`, `platform_write_file`, built on
   `open`/`read`/`write` on POSIX and `CreateFileW`/`ReadFile`/`WriteFile` on Windows, never `FILE *`),
@@ -485,12 +488,13 @@ the MSVC runtime (clang, as in CI) the C runtime picks `wmain` and the flag does
 - **Ctrl-C.** The shell ignores it while a command runs (`SetConsoleCtrlHandler`), so only the
   command is interrupted. At the prompt the editor reads it as a key.
 - **Exit status** values above 255 are reported as 255.
-- **Redirected files** are opened in text mode, so the shell's own output gets `\r\n` line
-  endings. Programs that are launched write their own bytes. The files are opened with
-  `CreateFileW` and wrapped in a C runtime descriptor (`_open_osfhandle`), which is what the
-  redirection of the shell's own output (`_dup2` onto 1 and 2) still needs. Moving all output to
-  handles (`SetStdHandle`, `WriteFile`) is not done: it needs the builtins to write through a
-  platform writer instead of the C runtime's `stdout`.
+- **Redirected files** get `\r\n` for the shell's own `\n`: `platform_write` translates when the
+  handle is a disk file (not a pipe or a console), like the C runtime's text mode did. Programs
+  that are launched write their own bytes. The files are opened with `CreateFileW` and wrapped
+  in a C runtime descriptor (`_open_osfhandle`), and the redirection of the shell's own output is
+  still `_dup2` onto descriptors 1 and 2: `platform_write` writes to the handle behind them.
+  Moving the redirection itself to `SetStdHandle` is not done (see the notes on pipelines: the
+  pipe end must be closed after restoring and before waiting, or the reader never sees the end).
 - **Not done:** `PATHEXT`, wildcard expansion, case-insensitive file name completion, and leaving
   the extension out when running a command given as a path (`.\prog`, see Finding commands).
 

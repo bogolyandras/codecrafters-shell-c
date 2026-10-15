@@ -20,8 +20,23 @@ struct PlatformDir {
 const PChar *const platform_executable_extensions[] = {NULL};
 
 void platform_init(void) {
-    // Flush after every printf
-    setbuf(stdout, NULL);
+}
+
+int platform_write(OutStream stream, const PChar *text, size_t length) {
+    const int fd = stream == OUT_STDERR ? STDERR_FILENO : STDOUT_FILENO;
+
+    size_t written = 0;
+    while (written < length) {
+        const ssize_t count = write(fd, text + written, length - written);
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return -1;
+        }
+        written += (size_t)count;
+    }
+    return 0;
 }
 
 char *platform_read_file(const PChar *path, size_t *size) {

@@ -62,11 +62,11 @@ static void handle_type_command(const PChar *executable_name, const PathMap* exe
 static int run_history_file(History *history, PChar *const *argv, size_t argument_count, int in_pipeline,
                             PChar option) {
   if (argument_count < 2) {
-    p_fprintf(stderr, P("history: -%c: option requires an argument" NEWLINE), (int)option);
+    p_eprintf(P("history: -%c: option requires an argument" NEWLINE), (int)option);
     return 1;
   }
   if (argument_count > 2) {
-    p_fprintf(stderr, P("history: too many arguments" NEWLINE));
+    p_eprintf(P("history: too many arguments" NEWLINE));
     return 1;
   }
 
@@ -76,11 +76,11 @@ static int run_history_file(History *history, PChar *const *argv, size_t argumen
 
   if (option == 'r') {
     if (history_load(history, argv[2]) != 0) {
-      p_fprintf(stderr, P("history: %" PS ": cannot read history file: %" PS NEWLINE), argv[2], p_strerror(errno));
+      p_eprintf(P("history: %" PS ": cannot read history file: %" PS NEWLINE), argv[2], p_strerror(errno));
       return 1;
     }
   } else if (history_save(history, argv[2], option == 'a') != 0) {
-    p_fprintf(stderr, P("history: %" PS ": cannot write history file: %" PS NEWLINE), argv[2], p_strerror(errno));
+    p_eprintf(P("history: %" PS ": cannot write history file: %" PS NEWLINE), argv[2], p_strerror(errno));
     return 1;
   }
 
@@ -98,7 +98,7 @@ static int run_history(History *history, PChar *const *argv, size_t argument_cou
   }
 
   if (argument_count > 1) {
-    p_fprintf(stderr, P("history: too many arguments" NEWLINE));
+    p_eprintf(P("history: too many arguments" NEWLINE));
     return 1;
   }
 
@@ -122,9 +122,9 @@ static int run_history(History *history, PChar *const *argv, size_t argument_cou
 
     if (!is_number) {
       if (argument[0] == '-') {
-        p_fprintf(stderr, P("history: %" PS ": invalid option" NEWLINE), argument);
+        p_eprintf(P("history: %" PS ": invalid option" NEWLINE), argument);
       } else {
-        p_fprintf(stderr, P("history: %" PS ": numeric argument required" NEWLINE), argument);
+        p_eprintf(P("history: %" PS ": numeric argument required" NEWLINE), argument);
       }
       return 1;
     }
@@ -176,7 +176,7 @@ static void print_single_quoted(const PChar *text) {
 static int print_completer(const CompleterTable *completers, const PChar *command) {
   const PChar *script = completers_find(completers, command);
   if (script == NULL) {
-    p_fprintf(stderr, P("complete: %" PS ": no completion specification" NEWLINE), command);
+    p_eprintf(P("complete: %" PS ": no completion specification" NEWLINE), command);
     return 1;
   }
 
@@ -217,12 +217,12 @@ static int run_complete(CompleterTable *completers, PChar *const *argv, size_t a
       remove = 1;
     } else if (p_strcmp(option, P("-C")) == 0) {
       if (i + 1 > argument_count) {
-        p_fprintf(stderr, P("complete: -C: option requires an argument" NEWLINE));
+        p_eprintf(P("complete: -C: option requires an argument" NEWLINE));
         return 2;
       }
       script = argv[++i];
     } else {
-      p_fprintf(stderr, P("complete: %" PS ": invalid option" NEWLINE COMPLETE_USAGE), option);
+      p_eprintf(P("complete: %" PS ": invalid option" NEWLINE COMPLETE_USAGE), option);
       return 2;
     }
   }
@@ -235,13 +235,13 @@ static int run_complete(CompleterTable *completers, PChar *const *argv, size_t a
 
   const int options = print + remove + (script != NULL);
   if (options > 1) {
-    p_fprintf(stderr, P("complete: only one of -p, -r and -C can be used" NEWLINE COMPLETE_USAGE));
+    p_eprintf(P("complete: only one of -p, -r and -C can be used" NEWLINE COMPLETE_USAGE));
     return 2;
   }
 
   if (script != NULL) {
     if (name_count == 0) {
-      p_fprintf(stderr, P("complete: -C: a command name is required" NEWLINE COMPLETE_USAGE));
+      p_eprintf(P("complete: -C: a command name is required" NEWLINE COMPLETE_USAGE));
       return 2;
     }
     if (in_pipeline) {
@@ -269,7 +269,7 @@ static int run_complete(CompleterTable *completers, PChar *const *argv, size_t a
     int status = 0;
     for (size_t n = 0; n < name_count; n++) {
       if (completers_remove(completers, names[n]) != 0) {
-        p_fprintf(stderr, P("complete: %" PS ": no completion specification" NEWLINE), names[n]);
+        p_eprintf(P("complete: %" PS ": no completion specification" NEWLINE), names[n]);
         status = 1;
       }
     }
@@ -277,7 +277,7 @@ static int run_complete(CompleterTable *completers, PChar *const *argv, size_t a
   }
 
   if (!print && name_count > 0) {
-    p_fprintf(stderr, P("complete: a completer is needed: use -C script command" NEWLINE COMPLETE_USAGE));
+    p_eprintf(P("complete: a completer is needed: use -C script command" NEWLINE COMPLETE_USAGE));
     return 2;
   }
 
@@ -351,7 +351,7 @@ static int print_variable(const VariableTable *variables, const PChar *name) {
     return 0;
   }
 
-  p_fprintf(stderr, P("declare: %" PS ": not found" NEWLINE), name);
+  p_eprintf(P("declare: %" PS ": not found" NEWLINE), name);
   return 1;
 }
 
@@ -381,7 +381,7 @@ static int run_declare(VariableTable *variables, PChar *const *argv, size_t argu
     if (p_strcmp(argv[i], P("-p")) == 0) {
       print = 1;
     } else {
-      p_fprintf(stderr, P("declare: %" PS ": invalid option" NEWLINE DECLARE_USAGE), argv[i]);
+      p_eprintf(P("declare: %" PS ": invalid option" NEWLINE DECLARE_USAGE), argv[i]);
       return 2;
     }
   }
@@ -438,7 +438,7 @@ static int run_declare(VariableTable *variables, PChar *const *argv, size_t argu
     }
 
     if (!variable_name_is_valid(name)) {
-      p_fprintf(stderr, P("declare: `%" PS "': not a valid identifier" NEWLINE), argument);
+      p_eprintf(P("declare: `%" PS "': not a valid identifier" NEWLINE), argument);
       status = 1;
       continue;
     }
@@ -484,7 +484,7 @@ int run_builtin(PChar *const *argv, int in_pipeline, void *context) {
 
   if (p_strcmp(name, P("type")) == 0) {
     if (argument_count < 1) {
-      p_fprintf(stderr, P("type: missing operand" NEWLINE));
+      p_eprintf(P("type: missing operand" NEWLINE));
       return 1;
     }
     handle_type_command(argv[1], shell->executables);
@@ -515,7 +515,7 @@ int run_builtin(PChar *const *argv, int in_pipeline, void *context) {
 
   if (p_strcmp(name, P("jobs")) == 0) {
     if (argument_count > 0) {
-      p_fprintf(stderr, P("jobs: too many arguments" NEWLINE));
+      p_eprintf(P("jobs: too many arguments" NEWLINE));
       return 1;
     }
 
@@ -533,7 +533,7 @@ int run_builtin(PChar *const *argv, int in_pipeline, void *context) {
 
   if (p_strcmp(name, P("cd")) == 0) {
     if (argument_count > 1) {
-      p_fprintf(stderr, P("cd: too many operands" NEWLINE));
+      p_eprintf(P("cd: too many operands" NEWLINE));
       return 1;
     }
 
@@ -541,7 +541,7 @@ int run_builtin(PChar *const *argv, int in_pipeline, void *context) {
     if (argument_count < 1) {
       directory_to_change_to = get_home_dir();
       if (directory_to_change_to == NULL) {
-        p_fprintf(stderr, P("cd: HOME not set" NEWLINE));
+        p_eprintf(P("cd: HOME not set" NEWLINE));
         return 1;
       }
     } else {

@@ -19,6 +19,9 @@ typedef int PInt;
  * be mistaken for a real character (a plain char EOF is the same as the byte 0xFF) */
 #define P_EOF EOF
 
+/* Lets the compiler check p_printf and p_eprintf like printf. Windows has no equivalent for wide text */
+#define P_PRINTF_FORMAT(format_index, first_argument) __attribute__((format(printf, format_index, first_argument)))
+
 /* Sizes and copies buffers (tokenizer, line editor, strdup). Not strlen on Windows: it counts
  * bytes up to the first 0 byte, and L"ab" is 61 00 62 00, so it would stop after one.
  */
@@ -48,16 +51,13 @@ typedef int PInt;
  * this, and plain memset sets bytes, which is wrong for wchar_t (hence wmemset).
  */
 #define p_memset memset
-/* Text output and line input. The plain C functions are right here because the text is already
- * UTF-8; the Windows twin needs real functions that convert (wprintf would mangle characters
- * outside the BMP, printf would print UTF-16 as garbage). */
-#define p_printf printf
-#define p_fprintf fprintf
+/* Line input. The text is already UTF-8, so the plain C functions are right. Output goes through
+ * platform_write (see core/platform.h) and is formatted with p_vsnprintf */
 /* Bounded formatting: job status, path joins, the COMP_POINT number. sprintf cannot be told
  * the buffer size. The result detects truncation: a path that does not fit is skipped.
  */
+#define p_vsnprintf vsnprintf
 #define p_snprintf snprintf /** Returns the length that would have been written */
-#define p_fputs fputs
 #define p_fgets fgets
 #define p_getchar getchar
 

@@ -47,7 +47,7 @@ void restore_stream(const SavedStream *saved) {
     // writing to the file, so this is reported here
     const int fd = stream_fd(saved->stream);
     if (dup2(saved->saved, fd) < 0) {
-        p_fprintf(stderr, P("shell: failed to restore descriptor %d: %" PS NEWLINE), fd, p_strerror(errno));
+        p_eprintf(P("shell: failed to restore descriptor %d: %" PS NEWLINE), fd, p_strerror(errno));
     }
     close(saved->saved);
 }

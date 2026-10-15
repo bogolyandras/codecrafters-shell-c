@@ -2,7 +2,10 @@
 #include "platform_win32.h"
 
 #include <errno.h>
+#include <io.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <windows.h>
 
 #include "core/common.h"
@@ -55,9 +58,89 @@ void platform_init(void) {
     SetConsoleOutputCP(CP_UTF8);
 
     SetConsoleCtrlHandler(ignore_ctrl_c, TRUE);
+}
 
-    // Flush after every print
-    setbuf(stdout, NULL);
+/** Writes bytes to a handle until all are written. Returns 0, or -1 with errno set */
+static int write_bytes(HANDLE handle, const char *data, size_t size) {
+    size_t written = 0;
+    while (written < size) {
+        const size_t remaining = size - written;
+        DWORD count = 0;
+        if (!WriteFile(handle, data + written, remaining > MAXDWORD ? MAXDWORD : (DWORD)remaining, &count, NULL) ||
+            count == 0) {
+            platform_set_errno_from_last_error();
+            return -1;
+        }
+        written += count;
+    }
+    return 0;
+}
+
+int platform_write(OutStream stream, const PChar *text, size_t length) {
+    if (length == 0) {
+        return 0;
+    }
+
+    // The descriptor decides where the text goes, so that redirections made on it apply
+    const intptr_t value = _get_osfhandle(stream == OUT_STDERR ? 2 : 1);
+    if (value == -1 || value == -2) {
+        errno = EBADF;
+        return -1;
+    }
+    HANDLE handle = (HANDLE)value;
+
+    DWORD mode;
+    if (GetConsoleMode(handle, &mode)) {
+        size_t done = 0;
+        while (done < length) {
+            const size_t remaining = length - done;
+            DWORD count = 0;
+            // A console write of more than about 64 KiB can fail, so it goes in pieces
+            if (!WriteConsoleW(handle, text + done, remaining > 16384 ? 16384 : (DWORD)remaining, &count, NULL) ||
+                count == 0) {
+                platform_set_errno_from_last_error();
+                return -1;
+            }
+            done += count;
+        }
+        return 0;
+    }
+
+    AUTO_FREE PChar *terminated = malloc((length + 1) * sizeof(PChar));
+    if (terminated == NULL) {
+        return -1;
+    }
+    memcpy(terminated, text, length * sizeof(PChar));
+    terminated[length] = L'\0';
+
+    AUTO_FREE char *utf8 = p_to_utf8(terminated);
+    if (utf8 == NULL) {
+        return -1;
+    }
+    const size_t size = strlen(utf8);
+
+    // Pipes get the bytes as they are. A file gets "\r\n" for "\n", like the C runtime's text mode
+    // streams did, which is what a redirected file (or a file the shell was started with) had before
+    if (GetFileType(handle) != FILE_TYPE_DISK) {
+        return write_bytes(handle, utf8, size);
+    }
+
+    size_t newlines = 0;
+    for (size_t i = 0; i < size; i++) {
+        newlines += utf8[i] == '\n';
+    }
+    AUTO_FREE char *translated = malloc(size + newlines + 1);
+    if (translated == NULL) {
+        return -1;
+    }
+    size_t out = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (utf8[i] == '\n') {
+            translated[out++] = '\r';
+        }
+        translated[out++] = utf8[i];
+    }
+    return write_bytes(handle, translated, out);
 }
 
 char *platform_read_file(const PChar *path, size_t *size) {

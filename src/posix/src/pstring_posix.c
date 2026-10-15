@@ -14,7 +14,7 @@ const PChar *p_strerror(int error_number) {
 }
 
 void p_perror(const PChar *text) {
-    fprintf(stderr, "%s: %s" NEWLINE, text, strerror(errno));
+    p_eprintf(P("%" PS ": %" PS NEWLINE), text, strerror(errno));
 }
 
 PChar *p_from_utf8(const char *utf8) {

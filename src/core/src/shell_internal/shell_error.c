@@ -1,7 +1,6 @@
 #include "core/shell_internal/shell_error.h"
 
 #include <errno.h>
-#include <stdio.h>
 
 #include "core/common.h"
 #include "core/pstring.h"
@@ -9,9 +8,9 @@
 /** Prints "context: strerror(errno)" or "context: detail: strerror(errno)" to stderr */
 void shell_print_error(const PChar *context, const PChar *detail) {
   if (detail != NULL) {
-    p_fprintf(stderr, P("%" PS ": %" PS ": %" PS NEWLINE), context, detail, p_strerror(errno));
+    p_eprintf(P("%" PS ": %" PS ": %" PS NEWLINE), context, detail, p_strerror(errno));
   } else {
-    p_fprintf(stderr, P("%" PS ": %" PS NEWLINE), context, p_strerror(errno));
+    p_eprintf(P("%" PS ": %" PS NEWLINE), context, p_strerror(errno));
   }
 }
 
@@ -20,11 +19,10 @@ void shell_print_error(const PChar *context, const PChar *detail) {
  * In a pipeline the failure is the reader having finished, which is not an error worth a message.
  */
 int shell_report_write_error(const PChar *command, int in_pipeline) {
-  if (!ferror(stdout)) {
+  if (!p_take_write_error(OUT_STDOUT)) {
     return 0;
   }
 
-  clearerr(stdout);
   if (in_pipeline) {
     return 0;
   }

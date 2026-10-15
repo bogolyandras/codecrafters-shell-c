@@ -39,6 +39,18 @@ static inline void platform_dir_cleanup(PlatformDir **dir) {
 /** For PlatformDir* from platform_dir_open, closed with platform_dir_close */
 #define AUTO_CLOSE_DIR CLEANUP(platform_dir_cleanup)
 
+/* ---- standard output -------------------------------------------------------------------- */
+
+/**
+ * Writes `length` units of text to standard output or standard error, as UTF-8 bytes (straight
+ * to the console as wide text when it is one on Windows). Nothing is buffered: the text has
+ * reached the stream when the call returns. Returns 0, or -1 with errno set.
+ *
+ * The stream is whatever descriptor 1 or 2 is at that moment, so redirections made by
+ * redirect_stream apply. Everything the shell prints goes through here (p_printf and friends).
+ */
+int platform_write(OutStream stream, const PChar *text, size_t length);
+
 /* ---- files ------------------------------------------------------------------------------ */
 
 /**

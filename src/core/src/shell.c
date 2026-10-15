@@ -64,7 +64,7 @@ typedef struct {
 
 static void append_history_at_exit(const HistoryFile *file) {
   if (file->path != NULL && history_save(file->history, file->path, 1) != 0) {
-    p_fprintf(stderr, P("history: %" PS ": cannot write history file: %" PS NEWLINE), file->path, p_strerror(errno));
+    p_eprintf(P("history: %" PS ": cannot write history file: %" PS NEWLINE), file->path, p_strerror(errno));
   }
 }
 
@@ -119,7 +119,7 @@ static void execute_pipeline(CommandVec *commands, ShellContext *shell) {
     Command *command = CommandVec_get(commands, i);
 
     if (StrVec_size(&command->tokens) == 0) {
-      p_fprintf(stderr, P("shell: syntax error: missing command in the pipeline" NEWLINE));
+      p_eprintf(P("shell: syntax error: missing command in the pipeline" NEWLINE));
       return;
     }
 
@@ -134,7 +134,7 @@ static void execute_pipeline(CommandVec *commands, ShellContext *shell) {
     if (!is_builtin(name)) {
       path = resolve_command(shell->executables, name);
       if (path == NULL) {
-        p_fprintf(stderr, P("%" PS ": not found" NEWLINE), name);
+        p_eprintf(P("%" PS ": not found" NEWLINE), name);
         return;
       }
     }
@@ -195,7 +195,7 @@ int shell_run(void) {
     history_file = NULL;
   }
   if (history_file != NULL && history_load(&history, history_file) != 0 && errno != ENOENT) {
-    p_fprintf(stderr, P("history: %" PS ": cannot read history file: %" PS NEWLINE), history_file, p_strerror(errno));
+    p_eprintf(P("history: %" PS ": cannot read history file: %" PS NEWLINE), history_file, p_strerror(errno));
   }
 
   // Declared after the history, so it runs before the history is released, on every way out
@@ -237,7 +237,7 @@ int shell_run(void) {
       return 1;
     }
     if (line_status == LINE_TOO_LONG) {
-      p_fprintf(stderr, P("shell: input line too long" NEWLINE));
+      p_eprintf(P("shell: input line too long" NEWLINE));
       continue;
     }
 
@@ -256,15 +256,15 @@ int shell_run(void) {
 
     if (tokenize(input, &commands, lookup_variable, &variables) != 0) {
       if (errno == TOKENIZE_BAD_SUBSTITUTION) {
-        p_fprintf(stderr, P("shell: bad substitution" NEWLINE));
+        p_eprintf(P("shell: bad substitution" NEWLINE));
       } else if (errno == TOKENIZE_UNTERMINATED_QUOTE) {
-        p_fprintf(stderr, P("shell: unterminated quote" NEWLINE));
+        p_eprintf(P("shell: unterminated quote" NEWLINE));
       } else if (errno == TOKENIZE_MISSING_REDIRECT_TARGET) {
-        p_fprintf(stderr, P("shell: syntax error: expected a file name after '>'" NEWLINE));
+        p_eprintf(P("shell: syntax error: expected a file name after '>'" NEWLINE));
       } else if (errno == TOKENIZE_EMPTY_COMMAND) {
-        p_fprintf(stderr, P("shell: syntax error: expected a command around '|' and '&'" NEWLINE));
+        p_eprintf(P("shell: syntax error: expected a command around '|' and '&'" NEWLINE));
       } else if (errno == TOKENIZE_MISPLACED_AMPERSAND) {
-        p_fprintf(stderr, P("shell: syntax error: '&' can only end the line" NEWLINE));
+        p_eprintf(P("shell: syntax error: '&' can only end the line" NEWLINE));
       } else {
         shell_print_error(P("shell"), P("failed to parse the command"));
       }
@@ -278,7 +278,7 @@ int shell_run(void) {
 
     if (command_count > 1) {
       if (CommandVec_get(&commands, command_count - 1)->background) {
-        p_fprintf(stderr, P("shell: a pipeline cannot run in the background" NEWLINE));
+        p_eprintf(P("shell: a pipeline cannot run in the background" NEWLINE));
         continue;
       }
       execute_pipeline(&commands, &shell);
@@ -311,7 +311,7 @@ int shell_run(void) {
     const PChar *first_parameter = *StrVec_get(&command->tokens, 0);
 
     if (command->background && is_builtin(first_parameter)) {
-      p_fprintf(stderr, P("%" PS ": a builtin cannot run in the background" NEWLINE), first_parameter);
+      p_eprintf(P("%" PS ": a builtin cannot run in the background" NEWLINE), first_parameter);
       continue;
     }
 
@@ -332,7 +332,7 @@ int shell_run(void) {
 
     const PChar *executable_location = resolve_command(executable_to_path_map, first_parameter);
     if (executable_location == NULL) {
-      p_fprintf(stderr, P("%" PS ": not found" NEWLINE), first_parameter);
+      p_eprintf(P("%" PS ": not found" NEWLINE), first_parameter);
       continue;
     }
 

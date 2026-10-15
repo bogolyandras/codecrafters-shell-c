@@ -9,7 +9,7 @@
  * below, and it compiles for both:
  *
  *     PChar *copy = p_strdup(word);
- *     p_fprintf(stderr, P("%" PS ": not found" NEWLINE), copy);
+ *     p_eprintf(P("%" PS ": not found" NEWLINE), copy);
  *
  *  - literals:   P("text")           narrow or wide literal
  *  - format:     PS                  the conversion for a PChar string argument, used as "%" PS
@@ -22,6 +22,7 @@
  *    p_from_utf8 where a narrow form is needed
  */
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,29 @@
 
 /* PChar, P(), PS and the p_* functions that differ per platform */
 #include "pstring_platform.h"
+
+/** The standard streams the shell writes text to */
+typedef enum {
+    OUT_STDOUT,
+    OUT_STDERR
+} OutStream;
+
+/**
+ * Formatted output to standard output / standard error. The format is checked against the
+ * arguments on platforms whose compiler can. Returns the number of units written, or -1 with
+ * errno set, in which case a later p_take_write_error(stream) returns non-zero.
+ */
+int p_printf(const PChar *format, ...) P_PRINTF_FORMAT(1, 2);
+int p_eprintf(const PChar *format, ...) P_PRINTF_FORMAT(1, 2);
+
+/** Writes the text as it is (no format) to a stream. Returns 0, or -1 with errno set */
+int p_write(OutStream stream, const PChar *text);
+
+/**
+ * Returns non-zero if a write to the stream failed since the last call, and forgets it. The
+ * failure of a write is remembered because the caller of p_printf rarely checks every call.
+ */
+int p_take_write_error(OutStream stream);
 
 /**
  * The current directory, written to `buffer` (`size` PChar units), and changing it. Same results

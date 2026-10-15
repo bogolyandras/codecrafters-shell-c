@@ -37,7 +37,7 @@ static int is_blank(PChar c) {
 
 /** Reads a line without terminal handling, for pipes, files and scripts */
 static int read_plain(const PChar *prompt, PChar *buffer, size_t size) {
-    p_fputs(prompt, stdout);
+    p_write(OUT_STDOUT, prompt);
 
     if (p_fgets(buffer, (int)size, stdin) == NULL) {
         return feof(stdin) ? LINE_EOF : LINE_ERROR;

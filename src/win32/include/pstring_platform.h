@@ -21,6 +21,9 @@ typedef wint_t PInt; /** Wide enough for any PChar and P_EOF */
  * be mistaken for a real character (a plain char EOF is the same as the byte 0xFF) */
 #define P_EOF WEOF
 
+/* The compiler has no format check for wide format strings */
+#define P_PRINTF_FORMAT(format_index, first_argument)
+
 /* Sizes and copies buffers (tokenizer, line editor, strdup). Not strlen on Windows: it counts
  * bytes up to the first 0 byte, and L"ab" is 61 00 62 00, so it would stop after one.
  */
@@ -53,16 +56,12 @@ typedef wint_t PInt; /** Wide enough for any PChar and P_EOF */
 /* Bounded formatting: job status, path joins, the COMP_POINT number. sprintf cannot be told
  * the buffer size. The result detects truncation: a path that does not fit is skipped.
  */
+#define p_vsnprintf vswprintf
 #define p_snprintf swprintf /** Returns a negative value when the output does not fit */
 
-/*
- * Text streams carry UTF-8 on every platform. On Windows these are functions that convert
- * with p_from_utf8 / p_to_utf8 (or write wide text straight to a console) instead of the
- * C runtime's wide stdio, which converts one UTF-16 unit at a time and mangles surrogate pairs.
- */
-int p_printf(const PChar *format, ...);
-int p_fprintf(FILE *stream, const PChar *format, ...);
-int p_fputs(const PChar *text, FILE *stream);
+/* Text streams carry UTF-8 on every platform. Output goes through platform_write (see
+ * core/platform.h), which converts, so the C runtime's wide stdio is not used for it: it converts
+ * one UTF-16 unit at a time and mangles surrogate pairs */
 /** Reads at most size - 1 units like fgets. A character cut by the limit becomes U+FFFD */
 PChar *p_fgets(PChar *buffer, int size, FILE *stream);
 /** Reads one character. A character outside the BMP is returned as its first surrogate unit */
