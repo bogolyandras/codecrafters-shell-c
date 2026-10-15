@@ -343,7 +343,7 @@ static int print_variable(const VariableTable *variables, const PChar *name) {
   }
 
   // Not a shell variable, but one that came with the environment: it is exported
-  const PChar *from_environment = variable_name_is_valid(name) ? p_getenv(name) : NULL;
+  const PChar *from_environment = variable_name_is_valid(name) ? platform_getenv(name) : NULL;
   if (from_environment != NULL) {
     p_printf(P("declare -x %" PS "="), name);
     print_double_quoted(from_environment);

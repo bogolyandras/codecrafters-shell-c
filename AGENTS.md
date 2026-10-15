@@ -360,7 +360,8 @@ All shell text is `PChar`, from `pstring.h`: `char` (UTF-8 bytes) on POSIX and `
   read with `p_take_write_error`. On Windows `p_fgets` and `p_getchar` convert with the project's
   own codec. Do not use the C runtime's wide stdio or `_O_U8TEXT`: it converts one UTF-16 unit
   at a time and mangles characters outside the BMP.
-- OS calls that take a path or a name go through `p_getenv`, `p_getcwd`, `p_chdir`
+- OS calls that take a path or a name go through `platform_getenv` (`GetEnvironmentVariableW` on
+  Windows, with the values kept so the returned pointer stays valid), `p_getcwd`, `p_chdir`
   (wide variants on Windows). File content (`platform_read_file`, `platform_write_file`, built on
   `open`/`read`/`write` on POSIX and `CreateFileW`/`ReadFile`/`WriteFile` on Windows, never `FILE *`),
   directory listing, executables, process creation and the terminal

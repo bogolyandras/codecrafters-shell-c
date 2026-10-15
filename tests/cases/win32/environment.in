@@ -1,0 +1,7 @@
+declare -p USERPROFILE
+declare -p userprofile
+declare -p PATH
+declare -p SURELY_NOT_SET_XYZ
+echo $USERPROFILE
+echo after_environment
+exit

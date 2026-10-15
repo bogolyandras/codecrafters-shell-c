@@ -15,8 +15,8 @@
  *  - format:     PS                  the conversion for a PChar string argument, used as "%" PS
  *  - lengths and sizes are always counted in PChar units, never in bytes: multiply by
  *    sizeof(PChar) when allocating
- *  - C runtime calls that take a path or a name are reached through p_getenv,
- *    p_getcwd and p_chdir. Opening files, directory listing, process creation and the
+ *  - C runtime calls that take a path or a name are reached through p_getcwd and p_chdir.
+ *    The environment (platform_getenv), opening files, directory listing, process creation and the
  *    terminal live behind platform.h, redirection.h, execution_handler.h and terminal.h
  *  - raw byte data, and anything written to a file by another program, uses p_to_utf8 and
  *    p_from_utf8 where a narrow form is needed

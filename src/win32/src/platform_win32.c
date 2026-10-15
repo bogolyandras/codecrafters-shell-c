@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 #include <windows.h>
 
 #include "core/common.h"
@@ -56,6 +57,69 @@ void platform_init(void) {
     SetConsoleOutputCP(CP_UTF8);
 
     SetConsoleCtrlHandler(ignore_ctrl_c, TRUE);
+}
+
+/** A value handed out by platform_getenv, kept so that the pointer stays valid */
+typedef struct EnvironmentCacheEntry {
+    struct EnvironmentCacheEntry *next;
+    PChar *name;
+    PChar *value;
+} EnvironmentCacheEntry;
+
+static EnvironmentCacheEntry *environment_cache = NULL;
+
+const PChar *platform_getenv(const PChar *name) {
+    if (name[0] == L'\0' || wcschr(name, L'=') != NULL) {
+        return NULL;
+    }
+
+    DWORD capacity = 256;
+    AUTO_FREE PChar *value = malloc(capacity * sizeof(PChar));
+    if (value == NULL) {
+        return NULL;
+    }
+
+    while (1) {
+        SetLastError(ERROR_SUCCESS);
+        const DWORD length = GetEnvironmentVariableW(name, value, capacity);
+        if (length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+            return NULL;
+        }
+        if (length < capacity) {
+            break; // `length` units without the terminator, and an empty value has length 0
+        }
+
+        capacity = length + 1; // too small: `length` is the size that is needed, with the terminator
+        PChar *larger = realloc(value, capacity * sizeof(PChar));
+        if (larger == NULL) {
+            return NULL;
+        }
+        value = larger;
+    }
+
+    // Hand out a copy that stays where it is while the variable keeps its value, like getenv does
+    for (EnvironmentCacheEntry *entry = environment_cache; entry != NULL; entry = entry->next) {
+        if (wcscmp(entry->name, name) != 0) {
+            continue;
+        }
+        if (wcscmp(entry->value, value) != 0) {
+            free(entry->value);
+            entry->value = TAKE(value);
+        }
+        return entry->value;
+    }
+
+    EnvironmentCacheEntry *entry = malloc(sizeof *entry);
+    PChar *name_copy = entry != NULL ? p_strdup(name) : NULL;
+    if (name_copy == NULL) {
+        free(entry);
+        return NULL;
+    }
+    entry->name = name_copy;
+    entry->value = TAKE(value);
+    entry->next = environment_cache;
+    environment_cache = entry;
+    return entry->value;
 }
 
 /** Writes bytes to a handle until all are written. Returns 0, or -1 with errno set */
@@ -299,7 +363,7 @@ int platform_is_path_separator(PChar c) {
 
 
 const PChar *platform_default_home_dir(void) {
-    const PChar *profile = p_getenv(L"USERPROFILE");
+    const PChar *profile = platform_getenv(L"USERPROFILE");
     return profile != NULL && profile[0] != L'\0' ? profile : NULL;
 }
 

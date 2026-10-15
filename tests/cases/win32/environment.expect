@@ -1,0 +1,6 @@
+# The environment is read with GetEnvironmentVariableW: set, case insensitive, and missing
+declare -x USERPROFILE=
+declare -x userprofile=
+declare -x PATH=
+declare: SURELY_NOT_SET_XYZ: not found
+after_environment

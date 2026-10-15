@@ -28,7 +28,7 @@ static const PChar *lookup_variable(const PChar *name, void *context) {
   if (variable != NULL) {
     return variable->value; // NULL for a variable that was declared without a value
   }
-  return p_getenv(name);
+  return platform_getenv(name);
 }
 
 /**
@@ -190,7 +190,7 @@ int shell_run(void) {
   }
 
   // HISTFILE names the file the history is read from at start-up and appended to at exit
-  const PChar *history_file = p_getenv(P("HISTFILE"));
+  const PChar *history_file = platform_getenv(P("HISTFILE"));
   if (history_file != NULL && history_file[0] == '\0') {
     history_file = NULL;
   }

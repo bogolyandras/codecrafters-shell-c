@@ -22,6 +22,10 @@ const PChar *const platform_executable_extensions[] = {NULL};
 void platform_init(void) {
 }
 
+const PChar *platform_getenv(const PChar *name) {
+    return getenv(name);
+}
+
 int platform_write(OutStream stream, const PChar *text, size_t length) {
     const int fd = stream == OUT_STDERR ? STDERR_FILENO : STDOUT_FILENO;
 

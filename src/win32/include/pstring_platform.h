@@ -67,11 +67,6 @@ PChar *p_fgets(PChar *buffer, int size, FILE *stream);
 /** Reads one character. A character outside the BMP is returned as its first surrogate unit */
 PInt p_getchar(void);
 
-/* C runtime calls that take a path or a name, declared in <stdlib.h> and <wchar.h> */
-/* HOME, PATH, HISTFILE and the fallback for declared variables. Not getenv on Windows: the
- * name and value are wide there, and the narrow one uses the ANSI code page.
- */
-#define p_getenv _wgetenv
 
 /** The value of a PChar as an unsigned number, for comparisons that must not depend on signedness */
 static inline unsigned int p_unit(PChar c) {

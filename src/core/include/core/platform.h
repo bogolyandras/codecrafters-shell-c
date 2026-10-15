@@ -39,6 +39,15 @@ static inline void platform_dir_cleanup(PlatformDir **dir) {
 /** For PlatformDir* from platform_dir_open, closed with platform_dir_close */
 #define AUTO_CLOSE_DIR CLEANUP(platform_dir_cleanup)
 
+/* ---- environment ------------------------------------------------------------------------ */
+
+/**
+ * The value of an environment variable, or NULL if it is not set. The text belongs to the
+ * platform module: it stays valid until the variable changes, and is never freed by the caller.
+ * An empty value is "" (not NULL). Names are case insensitive on Windows.
+ */
+const PChar *platform_getenv(const PChar *name);
+
 /* ---- standard output -------------------------------------------------------------------- */
 
 /**

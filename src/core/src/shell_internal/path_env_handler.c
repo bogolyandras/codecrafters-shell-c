@@ -37,7 +37,7 @@ StrVec* get_paths(void) {
         return NULL;
     }
 
-    const PChar *path_environment_variable = p_getenv(P("PATH"));
+    const PChar *path_environment_variable = platform_getenv(P("PATH"));
     if (path_environment_variable == NULL) {
         return TAKE(paths); // No PATH means no external commands, not an error
     }
