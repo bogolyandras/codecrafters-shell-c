@@ -74,9 +74,9 @@ expect it.
   runner is plain CMake (`tests/run_case.cmake`), and each case runs in its own empty directory:
   **a case must not `cd` before it creates files**, or they land in the home directory. The shell
   must exit with status 0, which is also how a sanitizer report fails a case.
-- `tests/pty_editor.py` (POSIX, needs Python 3): the line editor and TAB completion on a pseudo
+- `tests/legacy/pty_editor.py` (POSIX, needs Python 3): the line editor and TAB completion on a pseudo
   terminal, including the external completers. Pipes never reach the editor.
-- `tests/codecrafters/` (POSIX, needs Python 3 and a C compiler): the **CodeCrafters stages,
+- `tests/legacy/codecrafters/` (POSIX, needs Python 3 and a C compiler): the **CodeCrafters stages,
   reconstructed**. See the next section.
 
 CI (`.github/workflows/ci.yml`):
@@ -101,12 +101,12 @@ tokenizer (a small libFuzzer target would be a good addition).
 
 ### The CodeCrafters stages, reconstructed
 
-`tests/codecrafters/` re-implements the 76 stages of the course (base, navigation, quoting,
+`tests/legacy/codecrafters/` re-implements the 76 stages of the course (base, navigation, quoting,
 redirection, completion, filename completion, programmable completion, background jobs,
 pipelines, history, history persistence, parameter expansion) from the public tester,
 `codecrafters-io/shell-tester`, which is Go. Each stage is a function in `stages_*.py` named by
 its course slug (`oo8` ... `my0`); `run.py --list` prints them. One ctest test per stage:
-`ctest -R codecrafters.`; or `python3 -I tests/codecrafters/run.py <shell> --stage iz3 --seed 1`.
+`ctest -R codecrafters.`; or `python3 -I tests/legacy/codecrafters/run.py <shell> --stage iz3 --seed 1`.
 
 - **How it works** (mirrors the tester): the shell is started on a pseudo terminal with
   `PS1="$ "`, `harness.py` types into it and compares the rows of a small terminal model
@@ -450,7 +450,7 @@ mintty in Git Bash) the plain `fgets` fallback runs.
 ### Testing it
 
 Piped input only exercises the fallback. To test the editor you need a pseudo terminal:
-`tests/pty_editor.py` does that with `pty.fork()` (run it as `python3 -I`, and do not name a
+`tests/legacy/pty_editor.py` does that with `pty.fork()` (run it as `python3 -I`, and do not name a
 script `pty.py`, which shadows the standard module). Add a case there for new editor behaviour.
 Build with `-fsanitize=address,undefined` and check that no leak report appears on exit.
 

@@ -1,10 +1,11 @@
 # Behaviour tests. They run the built shell and look at what it prints, so they cover the
-# portable core and the platform module together.
+# portable core and the platform module together. The Python tests are kept under legacy/ until
+# the tests are redesigned.
 #
 #   cases/common/*.in|.expect   every platform: builtins and shell syntax only
 #   cases/posix/*.in|.expect    POSIX only: they use programs such as cat and sleep
-#   pty_editor.py               POSIX only: the line editor and TAB completion through a pseudo terminal
-#   codecrafters/               POSIX only: the 76 CodeCrafters stages, reconstructed (see AGENTS.md)
+#   legacy/pty_editor.py        POSIX only, Python: the line editor and TAB completion through a pseudo terminal
+#   legacy/codecrafters/        POSIX only, Python: the 76 CodeCrafters stages, reconstructed (see AGENTS.md)
 #
 # See run_case.cmake for the format of a case. Run them with `ctest --test-dir <build dir>`.
 
@@ -31,11 +32,11 @@ if (NOT WIN32)
     if (Python3_Interpreter_FOUND)
         # -I: isolated mode, so that a stray module in the working directory cannot shadow the standard ones
         add_test(NAME posix.pty_editor
-                COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/pty_editor.py $<TARGET_FILE:shell>)
+                COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/legacy/pty_editor.py $<TARGET_FILE:shell>)
 
-        # The CodeCrafters stages, reconstructed (see codecrafters/run.py): one test per stage, so a
+        # The CodeCrafters stages, reconstructed (see legacy/codecrafters/run.py): one test per stage, so a
         # failure names the stage. The list comes from the stages themselves
-        set(CC_RUNNER ${CMAKE_CURRENT_SOURCE_DIR}/codecrafters/run.py)
+        set(CC_RUNNER ${CMAKE_CURRENT_SOURCE_DIR}/legacy/codecrafters/run.py)
         execute_process(COMMAND ${Python3_EXECUTABLE} -I ${CC_RUNNER} --list
                 OUTPUT_VARIABLE CC_STAGE_LIST RESULT_VARIABLE CC_LIST_RESULT)
         if (CC_LIST_RESULT EQUAL 0)

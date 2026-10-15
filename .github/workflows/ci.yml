@@ -35,7 +35,7 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # Piped cases (tests/cases) and the line editor through a pseudo terminal (tests/pty_editor.py)
+      # Piped cases (tests/cases) and the line editor through a pseudo terminal (tests/legacy/pty_editor.py)
       - name: Test
         run: ctest --test-dir build --output-on-failure --timeout 120
 

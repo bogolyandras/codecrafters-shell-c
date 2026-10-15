@@ -53,4 +53,4 @@ dkms.conf
 
 build
 vcpkg_installed
-.claude/
+.claude/__pycache__/
