@@ -119,28 +119,8 @@ int platform_write(OutStream stream, const PChar *text, size_t length) {
     }
     const size_t size = strlen(utf8);
 
-    // Pipes get the bytes as they are. A file gets "\r\n" for "\n", like the C runtime's text mode
-    // streams did, which is what a redirected file (or a file the shell was started with) had before
-    if (GetFileType(handle) != FILE_TYPE_DISK) {
-        return write_bytes(handle, utf8, size);
-    }
-
-    size_t newlines = 0;
-    for (size_t i = 0; i < size; i++) {
-        newlines += utf8[i] == '\n';
-    }
-    AUTO_FREE char *translated = malloc(size + newlines + 1);
-    if (translated == NULL) {
-        return -1;
-    }
-    size_t out = 0;
-    for (size_t i = 0; i < size; i++) {
-        if (utf8[i] == '\n') {
-            translated[out++] = '\r';
-        }
-        translated[out++] = utf8[i];
-    }
-    return write_bytes(handle, translated, out);
+    // The bytes as they are, to a pipe or a file alike: no line ending translation
+    return write_bytes(handle, utf8, size);
 }
 
 char *platform_read_file(const PChar *path, size_t *size) {

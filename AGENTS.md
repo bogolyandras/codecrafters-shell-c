@@ -488,13 +488,14 @@ the MSVC runtime (clang, as in CI) the C runtime picks `wmain` and the flag does
 - **Ctrl-C.** The shell ignores it while a command runs (`SetConsoleCtrlHandler`), so only the
   command is interrupted. At the prompt the editor reads it as a key.
 - **Exit status** values above 255 are reported as 255.
-- **Redirected files** get `\r\n` for the shell's own `\n`: `platform_write` translates when the
-  handle is a disk file (not a pipe or a console), like the C runtime's text mode did. Programs
-  that are launched write their own bytes. The files are opened with `CreateFileW` and wrapped
-  in a C runtime descriptor (`_open_osfhandle`), and the redirection of the shell's own output is
-  still `_dup2` onto descriptors 1 and 2: `platform_write` writes to the handle behind them.
-  Moving the redirection itself to `SetStdHandle` is not done (see the notes on pipelines: the
-  pipe end must be closed after restoring and before waiting, or the reader never sees the end).
+- **Line endings.** The shell's own output is `\n` everywhere: `platform_write` writes the bytes
+  as they are to a console, a pipe or a file, with no `\r\n` translation (the C runtime's text
+  mode would add it). Programs that are launched write their own bytes. The files are opened
+  with `CreateFileW` and wrapped in a C runtime descriptor (`_open_osfhandle`), and the
+  redirection of the shell's own output is still `_dup2` onto descriptors 1 and 2:
+  `platform_write` writes to the handle behind them. Moving the redirection itself to
+  `SetStdHandle` is not done (the pipe end must be closed after restoring and before waiting,
+  or the reader never sees the end).
 - **Not done:** `PATHEXT`, wildcard expansion, case-insensitive file name completion, and leaving
   the extension out when running a command given as a path (`.\prog`, see Finding commands).
 
