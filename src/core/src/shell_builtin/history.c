@@ -1,10 +1,9 @@
 #include "core/shell_builtin/history.h"
 
-#include <errno.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "core/platform.h"
 #include "core/raii.h"
 
 int history_init(History *history) {
@@ -46,68 +45,32 @@ const PChar *history_get(const History *history, size_t index) {
     return entry != NULL ? entry->text : NULL;
 }
 
-/** Reads one line of any length without its line ending. NULL at the end of the file or on failure */
-static char *read_line(FILE *file) {
-    size_t capacity = 128;
-    size_t length = 0;
-
-    AUTO_FREE char *line = malloc(capacity);
-    if (line == NULL) {
-        return NULL;
-    }
-
-    while (fgets(line + length, (int)(capacity - length), file) != NULL) {
-        length += strlen(line + length);
-
-        if (length > 0 && line[length - 1] == '\n') {
-            line[--length] = '\0';
-            if (length > 0 && line[length - 1] == '\r') {
-                line[--length] = '\0';
-            }
-            return TAKE(line);
-        }
-
-        if (length + 1 < capacity) {
-            continue; // fgets stopped early: the end of the file
-        }
-
-        capacity *= 2;
-        char *larger = realloc(line, capacity);
-        if (larger == NULL) {
-            return NULL;
-        }
-        line = larger;
-    }
-
-    // The end of the file: a last line without a line ending still counts
-    if (length > 0 && !ferror(file)) {
-        if (line[length - 1] == '\r') {
-            line[--length] = '\0';
-        }
-        return TAKE(line);
-    }
-
-    return NULL;
-}
-
 int history_load(History *history, const PChar *path) {
-    AUTO_FCLOSE FILE *file = p_fopen(path, P("rb"));
-    if (file == NULL) {
+    size_t size = 0;
+    AUTO_FREE char *content = platform_read_file(path, &size);
+    if (content == NULL) {
         return -1;
     }
 
-    while (1) {
-        AUTO_FREE char *line = read_line(file);
-        if (line == NULL) {
-            break;
+    // `content` ends with a 0 that platform_read_file adds, so each line can be ended in place
+    size_t position = 0;
+    while (position < size) {
+        char *line = content + position;
+        char *newline = memchr(line, '\n', size - position);
+        const size_t length = newline != NULL ? (size_t)(newline - line) : size - position;
+        position += length + 1;
+
+        line[length] = '\0';
+        if (length > 0 && line[length - 1] == '\r') {
+            line[length - 1] = '\0';
         }
 
         // Blank lines are not commands
-        const char *content = line;
-        while (*content == ' ' || *content == '\t') {
-            content++;
+        const char *text = line;
+        while (*text == ' ' || *text == '\t') {
+            text++;
         }
-        if (*content == '\0') {
+        if (*text == '\0') {
             continue;
         }
 
@@ -120,17 +83,15 @@ int history_load(History *history, const PChar *path) {
         }
     }
 
-    if (ferror(file)) {
-        errno = EIO;
-        return -1;
-    }
-
     return 0;
 }
 
 int history_save(History *history, const PChar *path, int append) {
-    AUTO_FCLOSE FILE *file = p_fopen(path, append ? P("ab") : P("wb"));
-    if (file == NULL) {
+    // The whole text is built first and written in one go, so a failure leaves no half written entry
+    size_t capacity = 1024;
+    size_t length = 0;
+    AUTO_FREE char *text = malloc(capacity);
+    if (text == NULL) {
         return -1;
     }
 
@@ -146,12 +107,21 @@ int history_save(History *history, const PChar *path, int append) {
             return -1;
         }
 
-        if (fputs(utf8, file) == EOF || fputc('\n', file) == EOF) {
-            return -1;
+        const size_t line_length = strlen(utf8);
+        while (length + line_length + 1 > capacity) {
+            capacity *= 2;
+            char *larger = realloc(text, capacity);
+            if (larger == NULL) {
+                return -1;
+            }
+            text = larger;
         }
+        memcpy(text + length, utf8, line_length);
+        length += line_length;
+        text[length++] = '\n';
     }
 
-    if (fflush(file) != 0 || ferror(file)) {
+    if (platform_write_file(path, text, length, append) != 0) {
         return -1;
     }
 

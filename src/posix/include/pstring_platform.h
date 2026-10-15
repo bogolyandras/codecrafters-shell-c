@@ -15,25 +15,57 @@ typedef int PInt;
 
 #define P(literal) literal
 #define PS "s"
+/* What reading a character returns at the end of input: wider than PChar so that it cannot
+ * be mistaken for a real character (a plain char EOF is the same as the byte 0xFF) */
 #define P_EOF EOF
 
+/* Sizes and copies buffers (tokenizer, line editor, strdup). Not strlen on Windows: it counts
+ * bytes up to the first 0 byte, and L"ab" is 61 00 62 00, so it would stop after one.
+ */
 #define p_strlen strlen
+/* Equality of whole names: hashmap keys, builtin names, completer lookup, "." and "..". memcmp
+ * is no substitute: it needs a length and does not stop at the terminator.
+ */
 #define p_strcmp strcmp
+/* Prefix test for completion (command names, file names, common prefix). strcmp compares whole
+ * strings, and memcmp would read past a candidate shorter than the prefix; strncmp stops at
+ * the terminator.
+ */
 #define p_strncmp strncmp
+/* Finds one unit: '=' in declare, the PATH list separator, '}' and the closing quote in the
+ * tokenizer, '\n' in a line, "is c one of these" in completion. strstr wants a string, memchr
+ * wants a length and does not stop at the terminator.
+ */
 #define p_strchr strchr
+/* Unused: nothing in core, posix or win32 calls it. */
 #define p_strrchr strrchr
+/* Copies a known number of units: a slice of PATH with no terminator yet, a key plus its
+ * extension, text into the edit buffer. strcpy needs a terminated source, strncpy pads with
+ * zeros and may leave no terminator.
+ */
 #define p_memcpy memcpy
+/* Pads the line with spaces when the editor redraws a shorter line. No string function does
+ * this, and plain memset sets bytes, which is wrong for wchar_t (hence wmemset).
+ */
 #define p_memset memset
+/* Text output and line input. The plain C functions are right here because the text is already
+ * UTF-8; the Windows twin needs real functions that convert (wprintf would mangle characters
+ * outside the BMP, printf would print UTF-16 as garbage). */
 #define p_printf printf
 #define p_fprintf fprintf
+/* Bounded formatting: job status, path joins, the COMP_POINT number. sprintf cannot be told
+ * the buffer size. The result detects truncation: a path that does not fit is skipped.
+ */
 #define p_snprintf snprintf /** Returns the length that would have been written */
 #define p_fputs fputs
 #define p_fgets fgets
 #define p_getchar getchar
 
-/* C runtime calls that take a path or a name, declared in <stdlib.h> and <stdio.h> */
+/* C runtime calls that take a path or a name, declared in <stdlib.h> */
+/* HOME, PATH, HISTFILE and the fallback for declared variables. Not getenv on Windows: the
+ * name and value are wide there, and the narrow one uses the ANSI code page.
+ */
 #define p_getenv getenv
-#define p_fopen fopen /* The mode is a P("...") literal too */
 
 /** The value of a PChar as an unsigned number, for comparisons that must not depend on signedness */
 static inline unsigned int p_unit(PChar c) {

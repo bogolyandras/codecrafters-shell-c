@@ -29,17 +29,6 @@ static inline void raii_free_ptr(void *ptr) {
 /** For pointers released with free() */
 #define AUTO_FREE CLEANUP(raii_free_ptr)
 
-static inline void raii_fclose(FILE **file) {
-    if (*file != NULL) {
-        const int saved_errno = errno;
-        fclose(*file);
-        errno = saved_errno;
-    }
-}
-
-/** For FILE* streams from fopen(), closed with fclose(). NULL means "nothing to close" */
-#define AUTO_FCLOSE CLEANUP(raii_fclose)
-
 /** Evaluates to the value of `p` and resets `p` to NULL, transferring ownership to the caller */
 #define TAKE(p) ({ __typeof__(p) raii_taken_ = (p); (p) = NULL; raii_taken_; })
 

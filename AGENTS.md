@@ -165,7 +165,7 @@ assertions first (they carry the stages), then the stage list, then the helper p
 | `core/redirection.h`, `src/posix/src/redirection_posix.c`, `src/win32/src/redirection_win32.c` | `redirect_stream` / `restore_stream`: point stdout or stderr at a file and put it back. Callers see no descriptor |
 | `core/shell_internal/line_editor.h` | Interactive line input and TAB completion (see below) |
 | `core/terminal.h`, `terminal_posix.c`, `terminal_win32.c` | Terminal mode, key input and output |
-| `core/platform.h`, `platform_posix.c`, `platform_win32.c` | Startup, directory listing, executable rules, default home directory, backslash rules |
+| `core/platform.h`, `platform_posix.c`, `platform_win32.c` | Startup, whole-file read and write, directory listing, executable rules, default home directory, backslash rules |
 | `src/posix/include`, `src/win32/include` | `platform_config.h` (separators, `NEWLINE`) and `pstring_platform.h` (`PChar`, `P()`, `p_*` aliases), one pair per system |
 | `pstring_posix.c`, `pstring_win32.c` | `p_strerror`, `p_perror`, `p_getcwd`, `p_chdir`, UTF-8 conversion and (Windows) the stream functions |
 | `core/shell_internal/completion.h` | The TAB completion candidates: command names, a registered external completer, or paths |
@@ -176,7 +176,7 @@ assertions first (they carry the stages), then the stage list, then the helper p
 | `core/shell_internal/path_env_handler.h` | PATH scan, `StrVec` of directories, `PathMap` name to full path |
 | `core/execution_handler.h`, `execution_posix.c`, `execution_win32.c` | Run a program and wait: `fork`/`execv` or `CreateProcessW` |
 | `core/pstring.h`, `src/pstring.c` | The platform string abstraction: `PChar`, `P("...")`, `p_*` functions (see Strings) |
-| `core/raii.h` | `CLEANUP`, `AUTO_FREE`, `AUTO_FCLOSE`, `TAKE`, `DISOWN` (`AUTO_CLOSE_DIR` is in `platform.h`; `AUTO_CLOSE` and `TAKE_FD` for descriptors are each platform module's private `fd_raii.h`) |
+| `core/raii.h` | `CLEANUP`, `AUTO_FREE`, `TAKE`, `DISOWN` (`AUTO_CLOSE_DIR` is in `platform.h`; `AUTO_CLOSE` and `TAKE_FD` for descriptors are each platform module's private `fd_raii.h`) |
 | `core/datastructs/` | `Vector` and `HashMap` with type safe `VECTOR_DEFINE` / `HASHMAP_DEFINE` |
 
 ## Finding commands
@@ -345,7 +345,7 @@ All shell text is `PChar`, from `pstring.h`: `char` (UTF-8 bytes) on POSIX and `
   `p_fprintf(stderr, P("%" PS ": not found" NEWLINE), name)`. Never use a bare `%s` or `%ls`.
 - Functions: `p_strlen`, `p_strcmp`, `p_strncmp`, `p_strchr`, `p_strrchr`, `p_memcpy`,
   `p_memset`, `p_snprintf`, `p_printf`, `p_fprintf`, `p_fputs`, `p_fgets`, `p_getchar`,
-  `p_strdup`, `p_strerror`, `p_perror`, `p_fopen`.
+  `p_strdup`, `p_strerror`, `p_perror`.
 - **Sizes and lengths count PChar units, not bytes.** Multiply by `sizeof(PChar)` when
   allocating, and pass `sizeof buffer / sizeof buffer[0]` as a size. Use `PATH_MAX` as is.
 - `p_unit(c)` gives an unsigned value for comparisons (a plain `char` is signed).
@@ -357,8 +357,10 @@ All shell text is `PChar`, from `pstring.h`: `char` (UTF-8 bytes) on POSIX and `
   `p_fgets` and `p_getchar` are functions that convert with the project's own codec (or write
   wide text straight to a console). Do not use the C runtime's wide stdio or `_O_U8TEXT`: it
   converts one UTF-16 unit at a time and mangles characters outside the BMP.
-- OS calls that take a path or a name go through `p_getenv`, `p_fopen`, `p_getcwd`, `p_chdir`
-  (wide variants on Windows). Directory listing, executables, process creation and the terminal
+- OS calls that take a path or a name go through `p_getenv`, `p_getcwd`, `p_chdir`
+  (wide variants on Windows). File content (`platform_read_file`, `platform_write_file`, built on
+  `open`/`read`/`write` on POSIX and `CreateFileW`/`ReadFile`/`WriteFile` on Windows, never `FILE *`),
+  directory listing, executables, process creation and the terminal
   are behind `platform.h`, `execution_handler.h` and `terminal.h`; do not call `opendir`,
   `stat`, `fork` and friends from shell logic.
 

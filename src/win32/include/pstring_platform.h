@@ -17,15 +17,42 @@ typedef wint_t PInt; /** Wide enough for any PChar and P_EOF */
 #define P(literal) P_WIDE_LITERAL(literal) /* Expands macros such as NEWLINE first */
 #define P_WIDE_LITERAL(literal) L##literal
 #define PS "ls"
+/* What reading a character returns at the end of input: wider than PChar so that it cannot
+ * be mistaken for a real character (a plain char EOF is the same as the byte 0xFF) */
 #define P_EOF WEOF
 
+/* Sizes and copies buffers (tokenizer, line editor, strdup). Not strlen on Windows: it counts
+ * bytes up to the first 0 byte, and L"ab" is 61 00 62 00, so it would stop after one.
+ */
 #define p_strlen wcslen
+/* Equality of whole names: hashmap keys, builtin names, completer lookup, "." and "..". memcmp
+ * is no substitute: it needs a length and does not stop at the terminator.
+ */
 #define p_strcmp wcscmp
+/* Prefix test for completion (command names, file names, common prefix). strcmp compares whole
+ * strings, and memcmp would read past a candidate shorter than the prefix; strncmp stops at
+ * the terminator.
+ */
 #define p_strncmp wcsncmp
+/* Finds one unit: '=' in declare, the PATH list separator, '}' and the closing quote in the
+ * tokenizer, '\n' in a line, "is c one of these" in completion. strstr wants a string, memchr
+ * wants a length and does not stop at the terminator.
+ */
 #define p_strchr wcschr
+/* Unused: nothing in core, posix or win32 calls it. */
 #define p_strrchr wcsrchr
+/* Copies a known number of units: a slice of PATH with no terminator yet, a key plus its
+ * extension, text into the edit buffer. strcpy needs a terminated source, strncpy pads with
+ * zeros and may leave no terminator.
+ */
 #define p_memcpy wmemcpy
+/* Pads the line with spaces when the editor redraws a shorter line. No string function does
+ * this, and plain memset sets bytes, which is wrong for wchar_t (hence wmemset).
+ */
 #define p_memset wmemset
+/* Bounded formatting: job status, path joins, the COMP_POINT number. sprintf cannot be told
+ * the buffer size. The result detects truncation: a path that does not fit is skipped.
+ */
 #define p_snprintf swprintf /** Returns a negative value when the output does not fit */
 
 /*
@@ -42,8 +69,10 @@ PChar *p_fgets(PChar *buffer, int size, FILE *stream);
 PInt p_getchar(void);
 
 /* C runtime calls that take a path or a name, declared in <stdlib.h> and <wchar.h> */
+/* HOME, PATH, HISTFILE and the fallback for declared variables. Not getenv on Windows: the
+ * name and value are wide there, and the narrow one uses the ANSI code page.
+ */
 #define p_getenv _wgetenv
-#define p_fopen _wfopen /* The mode is a P("...") literal too */
 
 /** The value of a PChar as an unsigned number, for comparisons that must not depend on signedness */
 static inline unsigned int p_unit(PChar c) {

@@ -60,6 +60,94 @@ void platform_init(void) {
     setbuf(stdout, NULL);
 }
 
+char *platform_read_file(const PChar *path, size_t *size) {
+    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
+        platform_set_errno_from_last_error();
+        return NULL;
+    }
+
+    size_t capacity = 4096;
+    size_t length = 0;
+    char *data = malloc(capacity);
+    if (data == NULL) {
+        CloseHandle(file);
+        return NULL;
+    }
+
+    while (1) {
+        DWORD count = 0;
+        if (!ReadFile(file, data + length, (DWORD)(capacity - length - 1), &count, NULL)) {
+            // A pipe that was closed at its write end is the end of the data
+            if (GetLastError() == ERROR_BROKEN_PIPE) {
+                break;
+            }
+            platform_set_errno_from_last_error();
+            free(data);
+            CloseHandle(file);
+            return NULL;
+        }
+        if (count == 0) {
+            break;
+        }
+
+        length += count;
+        if (length + 1 >= capacity) {
+            if (capacity > MAXDWORD) {
+                errno = EFBIG;
+                free(data);
+                CloseHandle(file);
+                return NULL;
+            }
+            capacity *= 2;
+            char *larger = realloc(data, capacity);
+            if (larger == NULL) {
+                free(data);
+                CloseHandle(file);
+                return NULL;
+            }
+            data = larger;
+        }
+    }
+
+    CloseHandle(file);
+    data[length] = '\0';
+    *size = length;
+    return data;
+}
+
+int platform_write_file(const PChar *path, const char *data, size_t size, int append) {
+    // Like a redirection: `>` creates or truncates, `>>` creates or opens and writes at the end
+    const DWORD access = append ? FILE_APPEND_DATA : GENERIC_WRITE;
+    const DWORD disposition = append ? OPEN_ALWAYS : CREATE_ALWAYS;
+
+    HANDLE file = CreateFileW(path, access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, disposition,
+                              FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
+        platform_set_errno_from_last_error();
+        return -1;
+    }
+
+    size_t written = 0;
+    while (written < size) {
+        const size_t remaining = size - written;
+        DWORD count = 0;
+        if (!WriteFile(file, data + written, remaining > MAXDWORD ? MAXDWORD : (DWORD)remaining, &count, NULL)) {
+            platform_set_errno_from_last_error();
+            CloseHandle(file);
+            return -1;
+        }
+        written += count;
+    }
+
+    if (!CloseHandle(file)) {
+        platform_set_errno_from_last_error();
+        return -1;
+    }
+    return 0;
+}
+
 PlatformDir *platform_dir_open(const PChar *path) {
     const size_t path_length = wcslen(path);
 

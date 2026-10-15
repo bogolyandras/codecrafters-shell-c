@@ -3,11 +3,14 @@
 #include <dirent.h>
 #include <pwd.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include "core/common.h"
+#include "fd_raii.h"
 
 struct PlatformDir {
     DIR *dir;
@@ -19,6 +22,73 @@ const PChar *const platform_executable_extensions[] = {NULL};
 void platform_init(void) {
     // Flush after every printf
     setbuf(stdout, NULL);
+}
+
+char *platform_read_file(const PChar *path, size_t *size) {
+    AUTO_CLOSE int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return NULL;
+    }
+
+    size_t capacity = 4096;
+    size_t length = 0;
+    AUTO_FREE char *data = malloc(capacity);
+    if (data == NULL) {
+        return NULL;
+    }
+
+    while (1) {
+        const ssize_t count = read(fd, data + length, capacity - length - 1);
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return NULL;
+        }
+        if (count == 0) {
+            break;
+        }
+
+        length += (size_t)count;
+        if (length + 1 >= capacity) {
+            if (capacity > SIZE_MAX / 2) {
+                errno = EFBIG;
+                return NULL;
+            }
+            capacity *= 2;
+            char *larger = realloc(data, capacity);
+            if (larger == NULL) {
+                return NULL;
+            }
+            data = larger;
+        }
+    }
+
+    data[length] = '\0';
+    *size = length;
+    return TAKE(data);
+}
+
+int platform_write_file(const PChar *path, const char *data, size_t size, int append) {
+    AUTO_CLOSE int fd = open(path, O_WRONLY | O_CREAT | O_CLOEXEC | (append ? O_APPEND : O_TRUNC), 0666);
+    if (fd < 0) {
+        return -1;
+    }
+
+    size_t written = 0;
+    while (written < size) {
+        const ssize_t count = write(fd, data + written, size - written);
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return -1;
+        }
+        written += (size_t)count;
+    }
+
+    // A delayed write error (a full disk, a network file system) is reported by close
+    return close(TAKE_FD(fd));
 }
 
 PlatformDir *platform_dir_open(const PChar *path) {

@@ -39,6 +39,21 @@ static inline void platform_dir_cleanup(PlatformDir **dir) {
 /** For PlatformDir* from platform_dir_open, closed with platform_dir_close */
 #define AUTO_CLOSE_DIR CLEANUP(platform_dir_cleanup)
 
+/* ---- files ------------------------------------------------------------------------------ */
+
+/**
+ * Reads a whole file. Returns a heap buffer (release with free()) holding `*size` bytes followed
+ * by a 0 that is not counted, or NULL with errno set (ENOENT when it does not exist). The bytes
+ * are returned as they are: no line ending or encoding conversion.
+ */
+char *platform_read_file(const PChar *path, size_t *size);
+
+/**
+ * Writes `size` bytes as they are, creating the file when it is missing. Replaces the content,
+ * or adds to the end when `append` is non-zero. Returns 0, or -1 with errno set.
+ */
+int platform_write_file(const PChar *path, const char *data, size_t size, int append);
+
 /* ---- executables ------------------------------------------------------------------------ */
 
 /** Returns non-zero if the path is a regular file the shell can run */
